@@ -4,209 +4,268 @@ import '../screens/profile_screen.dart';
 
 class NannyCard extends StatelessWidget {
   final Map<String, dynamic> nanny;
-  final List<String> userPrefs; // This is the preferences set set by parents
+  final List<String> userPrefs;
 
   const NannyCard({super.key, required this.nanny, this.userPrefs = const []});
 
   @override
   Widget build(BuildContext context) {
-    // Core fix: Read all nanny tags in full without take(3) truncation, let newly associated/checked tags appear perfectly!
     final List<dynamic> allTags = nanny['tags'] ?? [];
     final String safeName = nanny['name'] ?? 'Unknown Nanny';
     final String safeLocation = nanny['location'] ?? 'Location not set';
     final String safeRating = nanny['rating']?.toString() ?? '5.0';
     final String safeRate = nanny['hourly_rate']?.toString() ?? '25';
 
-    return GestureDetector(
-      onTap: () {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (context) => ProfileScreen(nanny: nanny)),
-        );
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 16),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: AppColors.white,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: AppColors.cardShadow,
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      decoration: BoxDecoration(
+        color: AppColors.cardSurface,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: const Color(0xFFE2E8F0).withOpacity(0.6),
+          width: 0.8,
         ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 70,
-              height: 70,
-              margin: const EdgeInsets.only(right: 16),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: Colors.grey[200],
-                image: DecorationImage(
-                  image: NetworkImage(
-                    nanny['image'] ??
-                        'https://api.dicebear.com/7.x/avataaars/png?seed=$safeName',
-                  ),
-                  fit: BoxFit.cover,
-                ),
+        boxShadow: AppColors.cardShadow,
+      ),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => ProfileScreen(nanny: nanny),
               ),
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        safeName,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.dark,
-                        ),
-                      ),
-                      Row(
-                        children: [
-                          const Icon(
-                            Icons.star,
-                            size: 14,
-                            color: AppColors.accent,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            safeRating,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.accent,
-                              fontSize: 12,
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 头像 + 状态微光环
+                    Stack(
+                      children: [
+                        Container(
+                          width: 64,
+                          height: 64,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.primaryLight,
+                              width: 2,
                             ),
+                            image: DecorationImage(
+                              image: NetworkImage(
+                                nanny['image'] ??
+                                    'https://api.dicebear.com/7.x/avataaars/png?seed=$safeName',
+                              ),
+                              fit: BoxFit.cover,
+                            ),
+                          ),
+                        ),
+                        Positioned(
+                          bottom: 2,
+                          right: 2,
+                          child: Container(
+                            width: 14,
+                            height: 14,
+                            decoration: BoxDecoration(
+                              color: AppColors.success,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                safeName,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.dark,
+                                ),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
+                                  vertical: 3,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: const Color(0xFFFFFBEB),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.star_rounded,
+                                      size: 14,
+                                      color: AppColors.accent,
+                                    ),
+                                    const SizedBox(width: 2),
+                                    Text(
+                                      safeRating,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        color: Color(0xFFB45309),
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              const Icon(
+                                Icons.location_on_outlined,
+                                size: 13,
+                                color: AppColors.gray,
+                              ),
+                              const SizedBox(width: 3),
+                              Expanded(
+                                child: Text(
+                                  safeLocation,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: AppColors.gray,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                      const Icon(
-                        Icons.location_on,
-                        size: 12,
-                        color: AppColors.gray,
-                      ),
-                      const SizedBox(width: 4),
-                      Expanded(
-                        child: Text(
-                          safeLocation,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: AppColors.gray,
-                          ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Highlight fix area: Render nanny's tags in flat layout, as long as they are in parent's requirements, instantly turn bright green highlight!
-                  Wrap(
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // 标签栏（匹配高亮呈现精致胶囊状态）
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Wrap(
                     spacing: 6,
                     runSpacing: 6,
                     children: allTags.map((tag) {
                       final String tagStr = tag.toString().trim();
-                      // Strong validation of case and whitespace removal
                       final bool isMatch = userPrefs.any(
                         (p) => p.toLowerCase().trim() == tagStr.toLowerCase(),
                       );
-
                       return Container(
                         padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
+                          horizontal: 9,
                           vertical: 4,
                         ),
                         decoration: BoxDecoration(
                           color: isMatch
-                              ? const Color(0xFFDCFCE7)
-                              : const Color(
-                                  0xFFF1F5F9,
-                                ), // Match success bright green
-                          borderRadius: BorderRadius.circular(8),
+                              ? const Color(0xFFECFDF5)
+                              : AppColors.lightGray,
+                          borderRadius: BorderRadius.circular(20),
                           border: Border.all(
                             color: isMatch
-                                ? const Color(0xFFBBF7D0)
+                                ? const Color(0xFFA7F3D0)
                                 : Colors.transparent,
-                            width: 0.5,
+                            width: 0.8,
                           ),
                         ),
                         child: Text(
                           tagStr,
                           style: TextStyle(
                             fontSize: 11,
-                            color: isMatch ? AppColors.success : AppColors.gray,
+                            color: isMatch
+                                ? const Color(0xFF047857)
+                                : AppColors.body,
                             fontWeight: isMatch
-                                ? FontWeight.bold
+                                ? FontWeight.w600
                                 : FontWeight.normal,
                           ),
                         ),
                       );
                     }).toList(),
                   ),
-
-                  const SizedBox(height: 12),
-                  const Divider(height: 1, color: Color(0xFFF1F5F9)),
-                  const SizedBox(height: 12),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                ),
+                const SizedBox(height: 14),
+                const Divider(
+                  height: 1,
+                  thickness: 0.8,
+                  color: Color(0xFFF1F5F9),
+                ),
+                const SizedBox(height: 12),
+                // 底部价格与按钮
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    RichText(
+                      text: TextSpan(
                         children: [
-                          RichText(
-                            text: TextSpan(
-                              text: 'RM $safeRate',
-                              style: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primary,
-                              ),
-                              children: const [
-                                TextSpan(
-                                  text: '/hr',
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: AppColors.gray,
-                                    fontWeight: FontWeight.normal,
-                                  ),
-                                ),
-                              ],
+                          TextSpan(
+                            text: "RM $safeRate",
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.primary,
                             ),
                           ),
-                          const Text(
-                            "Holiday Surcharge Eligible",
+                          const TextSpan(
+                            text: " / hr",
                             style: TextStyle(
-                              fontSize: 9,
-                              color: Color(0xFFEF4444),
-                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              color: AppColors.gray,
+                              fontWeight: FontWeight.w500,
                             ),
                           ),
                         ],
                       ),
-                      const Text(
-                        "View Profile",
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 6,
                       ),
-                    ],
-                  ),
-                ],
-              ),
+                      decoration: BoxDecoration(
+                        color: AppColors.primaryLight,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Row(
+                        children: [
+                          Text(
+                            "View Details",
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                          SizedBox(width: 4),
+                          Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 10,
+                            color: AppColors.primary,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

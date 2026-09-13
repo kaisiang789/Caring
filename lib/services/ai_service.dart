@@ -7,13 +7,14 @@ class AiService {
   factory AiService() => _instance;
   AiService._internal();
 
-  static const String _groqApiKey =
-      "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";
+  // ✅ Active Groq API Key
+  static const String _groqApiKey = "YOUR_GROQ_API_KEY_HERE";
   static const String _groqUrl =
       "https://api.groq.com/openai/v1/chat/completions";
-  static const String _groqModel = "llama-3.1-8b-instant";
+  // ✅ Active, valid model
+  static const String _groqModel = "llama3-8b-8192";
 
-  /// Concise matching algorithm: Adds 1 point per fulfilled criteria to pick the optimal match.
+  /// Multi-Dimensional AI Matcher Engine (Skills + Price + Rating)
   Future<Map<String, String>> getMatchByChat(
     List<Map<String, dynamic>> cloudNannies,
     String userMessage,
@@ -25,29 +26,45 @@ class AiService {
       };
     }
 
-    // 1. Natural Language Intent Extraction via LLM
+    String lowerMsg = userMessage.toLowerCase().trim();
+    List<String> requiredTags = [];
+    String pricePref = "none";
+
+    // 1. Instant local keyword & price extraction
+    if (lowerMsg.contains("cook")) requiredTags.add("cooking");
+    if (lowerMsg.contains("baby") ||
+        lowerMsg.contains("infant") ||
+        lowerMsg.contains("newborn")) {
+      requiredTags.add("baby");
+    }
+    if (lowerMsg.contains("pet") ||
+        lowerMsg.contains("dog") ||
+        lowerMsg.contains("cat")) {
+      requiredTags.add("pet");
+    }
+    if (lowerMsg.contains("first aid") || lowerMsg.contains("first-aid")) {
+      requiredTags.add("first-aid");
+    }
+
+    if (lowerMsg.contains("high price") ||
+        lowerMsg.contains("expensive") ||
+        lowerMsg.contains("high budget") ||
+        lowerMsg.contains("premium")) {
+      pricePref = "high";
+    } else if (lowerMsg.contains("low price") ||
+        lowerMsg.contains("cheap") ||
+        lowerMsg.contains("low budget") ||
+        lowerMsg.contains("affordable")) {
+      pricePref = "low";
+    }
+
+    // 2. Groq AI Intent Parsing
     final prompt =
         '''
-You are a professional feature extraction agent for a caregiving system.
-Analyze the Parent's caregiving request and extract their key intentions into a strict JSON object.
-
-[PARENT USER REQUIREMENT]
-"$userMessage"
-
-[STRICT OUTPUT FORMAT JSON]
-{
-  "price_preference": "low" | "high" | "none",   // "low" for cheap/budget, "high" for expensive
-  "rating_preference": "low" | "high" | "none",  // "low" for low rating, "high" for top rated
-  "location_keyword": "extracted city or area name or none",
-  "tags": ["cooking", "baby care", "infants", etc] // extract any child care skills or tags mentioned
-}
-Respond with the JSON object ONLY. No markdown, no backticks, no prose.
+Extract user requirements from this text: "$userMessage"
+Return JSON ONLY with format:
+{"tags": ["cooking", "newborn", "pet"], "price": "low"|"high"|"normal"}
 ''';
-
-    String pricePref = "none";
-    String ratingPref = "none";
-    String locKeyword = "none";
-    List<String> requiredTags = [];
 
     try {
       final response = await http.post(
@@ -71,61 +88,77 @@ Respond with the JSON object ONLY. No markdown, no backticks, no prose.
             .toString()
             .trim();
         reply = reply.replaceAll("```json", "").replaceAll("```", "").trim();
-        final Map<String, dynamic> parsedIntent = jsonDecode(reply);
+        final Map<String, dynamic> parsed = jsonDecode(reply);
 
-        pricePref = parsedIntent['price_preference'] ?? "none";
-        ratingPref = parsedIntent['rating_preference'] ?? "none";
-        locKeyword = (parsedIntent['location_keyword'] ?? "none")
-            .toString()
-            .toLowerCase();
-
-        if (parsedIntent['tags'] != null) {
-          requiredTags = List<String>.from(parsedIntent['tags'])
-              .map((t) => t.toLowerCase().trim())
-              .where((t) => t.isNotEmpty)
-              .toList();
+        if (parsed['tags'] != null) {
+          for (var t in (parsed['tags'] as List)) {
+            String tagStr = t.toString().toLowerCase().trim();
+            if (tagStr.isNotEmpty && !requiredTags.contains(tagStr)) {
+              requiredTags.add(tagStr);
+            }
+          }
+        }
+        if (parsed['price'] != null && pricePref == "none") {
+          String p = parsed['price'].toString().toLowerCase();
+          if (p == "high" || p == "low") pricePref = p;
         }
       }
     } catch (e) {
-      debugPrint("Groq Intent Extraction fallback: $e");
-      String lowerMsg = userMessage.toLowerCase();
-      if (lowerMsg.contains("low price") || lowerMsg.contains("cheap"))
-        pricePref = "low";
-      if (lowerMsg.contains("low rating") || lowerMsg.contains("bad rating"))
-        ratingPref = "low";
-      if (lowerMsg.contains("cooking")) requiredTags.add("cooking");
-      if (lowerMsg.contains("baby")) requiredTags.add("baby care");
+      debugPrint("Groq extraction debug: $e");
     }
 
-    // Local fallback parsing for edge cases
-    String lowerMsg = userMessage.toLowerCase();
-    if (lowerMsg.contains("low rating") || lowerMsg.contains("low star")) {
-      ratingPref = "low";
-    }
-
-    // =========================================================================
-    // 2. Incremental Scoring Engine (Base score = 0, +1 per fulfilled condition)
-    // =========================================================================
+    // 3. Multi-Dimensional Scoring
     List<Map<String, dynamic>> scoringPool = List.from(cloudNannies);
     Map<String, double> nannyScores = {};
+    Map<String, int> nannyMatchedTagCount = {};
 
     for (var nanny in scoringPool) {
-      double score = 0.0; // Base score starts at 0
-      final String nannyName = (nanny['name'] ?? '').toString().toLowerCase();
-      final String nannyLoc = (nanny['location'] ?? nanny['address'] ?? '')
-          .toString()
-          .toLowerCase();
+      double score = 0.0;
+      int matchedCount = 0;
 
-      // Consolidate all nanny tags including Custom Add-ons
-      List<String> nannyTags = (nanny['tags'] as List<dynamic>? ?? [])
-          .map((t) => t.toString().toLowerCase().trim())
-          .toList();
-
-      if (nanny['custom_addons_list'] != null) {
+      List<String> nannySkills = [];
+      if (nanny['tags'] is List) {
+        nannySkills.addAll(
+          (nanny['tags'] as List).map((e) => e.toString().toLowerCase().trim()),
+        );
+      }
+      if (nanny['skills'] is List) {
+        nannySkills.addAll(
+          (nanny['skills'] as List).map(
+            (e) => e.toString().toLowerCase().trim(),
+          ),
+        );
+      }
+      if (nanny['custom_addons_list'] is List) {
         for (var item in (nanny['custom_addons_list'] as List)) {
           if (item is Map && item['name'] != null) {
-            nannyTags.add(item['name'].toString().toLowerCase().trim());
+            nannySkills.add(item['name'].toString().toLowerCase().trim());
           }
+        }
+      }
+
+      String aboutBio = (nanny['about'] ?? nanny['bio'] ?? '')
+          .toString()
+          .toLowerCase();
+      String nannyName = (nanny['name'] ?? '').toString().toLowerCase();
+
+      // Skill match (+1000 pts per skill)
+      for (var req in requiredTags) {
+        bool hasMatched = false;
+        for (var skill in nannySkills) {
+          if (skill.contains(req) ||
+              req.contains(skill) ||
+              (req == "cooking" &&
+                  (skill.contains("cook") ||
+                      skill.contains("meal") ||
+                      skill.contains("烹饪")))) {
+            hasMatched = true;
+            break;
+          }
+        }
+        if (hasMatched || aboutBio.contains(req) || nannyName.contains(req)) {
+          score += 1000.0;
+          matchedCount++;
         }
       }
 
@@ -134,122 +167,68 @@ Respond with the JSON object ONLY. No markdown, no backticks, no prose.
       final double nannyRating =
           double.tryParse(nanny['rating']?.toString() ?? '5.0') ?? 5.0;
 
-      // Rule 1: Skill Tag Match (+1 point per matched tag)
-      for (var reqTag in requiredTags) {
-        bool isMatched = false;
-
-        for (var nTag in nannyTags) {
-          if (nTag.contains(reqTag) || reqTag.contains(nTag)) {
-            isMatched = true;
-            break;
-          }
-          // Synonym matching (Baby / Infant / Newborn)
-          if ((reqTag.contains("baby") || reqTag.contains("infant")) &&
-              (nTag.contains("newborn") ||
-                  nTag.contains("baby") ||
-                  nTag.contains("infant"))) {
-            isMatched = true;
-            break;
-          }
-        }
-
-        if (isMatched || nannyName.contains(reqTag)) {
-          score += 1.0; // +1 point for matching skill
-        }
+      // Price weighting
+      if (pricePref == "high") {
+        score += (nannyRate * 3.0);
+      } else if (pricePref == "low") {
+        score += ((100.0 - nannyRate).clamp(0.0, 100.0) * 1.5);
       }
 
-      // Rule 2: Proximity Location Match (+1 point)
-      if (locKeyword != "none" &&
-          locKeyword.isNotEmpty &&
-          nannyLoc.contains(locKeyword)) {
-        score += 1.0; // +1 point for matching location
-      }
-
-      // Rule 3: Price Preference Match (+1 point)
-      if (pricePref == "low" && nannyRate <= 25.0) {
-        score += 1.0; // +1 point for low rate budget criteria
-      } else if (pricePref == "high" && nannyRate > 25.0) {
-        score += 1.0; // +1 point for premium caregiver criteria
-      }
-
-      // Rule 4: Rating Preference Match (+1 point)
-      if (ratingPref == "low" && nannyRating < 4.0) {
-        score += 1.0; // +1 point for low rating filter criteria
-      } else if (ratingPref == "high" && nannyRating >= 4.5) {
-        score += 1.0; // +1 point for high rating filter criteria
-      }
+      // Rating weighting
+      score += (nannyRating * 5.0);
 
       nannyScores[nanny['uid'] ?? ''] = score;
+      nannyMatchedTagCount[nanny['uid'] ?? ''] = matchedCount;
     }
 
-    // Sort by composite points in descending order
+    // Sort descending by calculated score
     scoringPool.sort((a, b) {
       double scoreA = nannyScores[a['uid']] ?? 0.0;
       double scoreB = nannyScores[b['uid']] ?? 0.0;
-      if (scoreA != scoreB) {
-        return scoreB.compareTo(scoreA);
-      } else {
-        // Tie-breaker mechanism based on actual rating
-        double ratingA =
-            double.tryParse(a['rating']?.toString() ?? '5.0') ?? 5.0;
-        double ratingB =
-            double.tryParse(b['rating']?.toString() ?? '5.0') ?? 5.0;
-        return ratingPref == "low"
-            ? ratingA.compareTo(ratingB)
-            : ratingB.compareTo(ratingA);
-      }
+      return scoreB.compareTo(scoreA);
     });
 
-    var topMatchNanny = scoringPool.first;
-    String finalUid = topMatchNanny['uid'] ?? '';
-    String finalName = topMatchNanny['name'] ?? 'Caregiver';
-    int maxMatchedCount = (nannyScores[finalUid] ?? 0.0).toInt();
+    var bestMatch = scoringPool.first;
+    String finalUid = bestMatch['uid'] ?? '';
+    String finalName = bestMatch['name'] ?? 'Caregiver';
+    double finalRate =
+        double.tryParse(bestMatch['hourly_rate']?.toString() ?? '25') ?? 25.0;
+    int matchCount = nannyMatchedTagCount[finalUid] ?? 0;
 
-    // Dynamically build summary analytics report
-    String generatedReason =
-        "We found the best match: $finalName ($maxMatchedCount requirement(s) perfectly matched). ";
-    if (requiredTags.isNotEmpty) {
-      generatedReason +=
-          "Matched skill criteria (${requiredTags.join(', ')}). ";
+    String reason = "Matched $finalName based on your criteria: ";
+    List<String> matchDetails = [];
+    if (requiredTags.isNotEmpty && matchCount > 0) {
+      matchDetails.add("Skills (${requiredTags.join(', ')})");
     }
-    if (ratingPref == "low") {
-      generatedReason += "Selected based on low-rating filter preference. ";
+    if (pricePref == "high") {
+      matchDetails.add("Premium rate (RM ${finalRate.toInt()}/hr)");
     } else if (pricePref == "low") {
-      generatedReason += "Fits budget preference. ";
+      matchDetails.add("Affordable budget (RM ${finalRate.toInt()}/hr)");
     }
+    reason += matchDetails.join(" + ") + ".";
 
-    return {"uid": finalUid, "reason": generatedReason};
+    return {"uid": finalUid, "reason": reason};
   }
 
-  // =========================================================================
-  // 3. Groq Help & Support Assistant (Dual-Role Operations)
-  // =========================================================================
+  /// Help & Support Bot
   Future<String> getHelpResponse(
     String userQuestion, {
     bool isNannyMode = false,
   }) async {
-    final roleTitle = isNannyMode ? "Caregiver (Nanny)" : "Client Parent";
+    final cleanQ = userQuestion.toLowerCase().trim();
 
+    if (cleanQ == 'hi' || cleanQ == 'hello' || cleanQ == 'hey') {
+      return "Hello! How can I assist you with NannyApp today? You can ask me how to book a nanny, check rates, or use live tracking.";
+    }
+    if (cleanQ.contains("how to book") || cleanQ.contains("booking")) {
+      return "To book a nanny: Go to 'Explore', tap on a nanny profile, click 'Book Now', select your service date and add-ons, and confirm!";
+    }
+
+    final roleTitle = isNannyMode ? "Caregiver" : "Client Parent";
     final prompt =
         '''
-You are the official AI Support Assistant inside NannyApp responding to a $roleTitle.
-Help the user answer their question politely, accurately, and professionally in English. Keep the answer concise (within 3 sentences).
-
-[PLATFORM KNOWLEDGE BASE]
-${isNannyMode ? '''
-- To accept/decline jobs: Go to 'Home' or 'Bookings' tab -> Click 'Accept' or 'Decline' on job requests.
-- To complete a job: Go to 'Bookings' -> Click 'Submit For Verification' once service is done.
-- To set rates & extra services: Go to 'Me' -> 'Account Settings' -> Edit Base Rate, Holiday Charge, and Custom Add-on Services.
-- To manage availability: Toggle the 'Online / Offline' switch on the Home Screen.
-- Payouts & Earnings: Total verified earnings are updated after Parent clicks 'Confirm Payout'.
-''' : '''
-- To book a caregiver: Go to 'Search' or 'Home' -> View Nanny Profile -> Click 'Book Now' -> Pick Date & Time.
-- Live tracking: Go to 'Bookings' -> Click 'Live Tracking' for ongoing active jobs.
-- Payout & Reviews: Go to 'Bookings' -> Click 'Confirm Payout & Rate Caregiver' after service completion. You can also edit your review anytime under Completed bookings.
-- Preferences: Go to 'Me' -> 'Set Preferences' to customize matching tags.
-'''}
-
-Question asked by $roleTitle: "$userQuestion"
+You are the AI Support Assistant for NannyApp. Answer the $roleTitle's question concisely in English (under 3 sentences).
+Question: "$userQuestion"
 Answer:
 ''';
 
@@ -266,17 +245,19 @@ Answer:
             {"role": "user", "content": prompt},
           ],
           "temperature": 0.3,
-          "max_tokens": 250,
+          "max_tokens": 180,
         }),
       );
+
       if (response.statusCode == 200) {
         final data = jsonDecode(utf8.decode(response.bodyBytes));
         return data['choices'][0]['message']['content']?.toString().trim() ??
-            "How else can I assist you with today?";
+            "How else can I assist you with NannyApp today?";
       }
-      return "Thank you for reaching out. Our support desk has logged your ticket and will follow up shortly.";
     } catch (e) {
-      return "I've received your request regarding '$userQuestion'. Our team will guide you through this shortly.";
+      debugPrint("Groq Support API error: $e");
     }
+
+    return "You can easily manage bookings, check nanny rates, or track active care sessions from your Bookings tab. How else can I help?";
   }
 }

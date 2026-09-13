@@ -18,8 +18,10 @@ class FirestoreService {
           for (var doc in snapshot.docs) {
             var data = doc.data();
             data['uid'] = doc.id;
-            bool isOnline = data['isOnline'] ?? true;
-            if (isOnline) {
+            bool isOnline = data['isOnline'] ?? false;
+            // 关键改动：必须是本人在线 且 完成了 KYC 认证的老/新保姆才会展示给家长
+            bool isKycVerified = data['isKycVerified'] == true;
+            if (isOnline && isKycVerified) {
               availableNannies.add(data);
             }
           }

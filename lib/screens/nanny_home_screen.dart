@@ -3,6 +3,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../core/theme.dart';
 import '../services/firestore_service.dart';
+import '../widgets/kyc_dialog.dart';
 import 'nanny_reviews_screen.dart';
 
 class NannyHomeScreen extends StatefulWidget {
@@ -16,12 +17,43 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
   Key _nannyStreamKey = UniqueKey();
 
   Future<void> _handleRefresh() async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (mounted) {
-      setState(() {
-        _nannyStreamKey = UniqueKey();
-      });
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (mounted) setState(() => _nannyStreamKey = UniqueKey());
+  }
+
+  // 严格拦截方法：没通过 KYC 绝不允许写入 online
+  void _onToggleSwitch(bool isKycVerified, bool newValue) async {
+    if (!isKycVerified) {
+      // 弹出强制 KYC 弹窗
+      KycDialogHelper.showKycPromptDialog(
+        context,
+        onVerifyNow: () async {
+          bool? verified = await KycDialogHelper.showSimulatedKycSheet(context);
+          if (verified == true && mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("KYC Verified! You can now accept jobs online."),
+                backgroundColor: AppColors.success,
+              ),
+            );
+          }
+        },
+        onLater: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                "Action blocked: Complete KYC verification to go Online.",
+              ),
+              backgroundColor: AppColors.danger,
+            ),
+          );
+        },
+      );
+      return;
     }
+
+    // 只有已认证保姆才允许写入数据库
+    await FirestoreService.updateNannyStatus(newValue);
   }
 
   void _showEarningsBreakdownSheet(String nannyUid, int totalEarnings) {
@@ -50,38 +82,17 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const SizedBox(
-                  height: 250,
+                  height: 200,
                   child: Center(
                     child: CircularProgressIndicator(color: AppColors.primary),
                   ),
                 );
               }
-
               List<Map<String, dynamic>> completedJobs = [];
               int calculatedTotalEarnings = 0;
-
               if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
                 for (var doc in snapshot.data!.docs) {
                   var data = doc.data() as Map<String, dynamic>;
-
-                  int addonTotal = 0;
-                  List<Map<String, dynamic>> addonItems = [];
-                  if (data['selectedAddons'] != null) {
-                    List<dynamic> rawAddons = data['selectedAddons'] as List;
-                    for (var addon in rawAddons) {
-                      if (addon is Map) {
-                        int price =
-                            int.tryParse(addon['price']?.toString() ?? '0') ??
-                            0;
-                        addonTotal += price;
-                        addonItems.add({
-                          'name': addon['name'] ?? 'Add-on Service',
-                          'price': price,
-                        });
-                      }
-                    }
-                  }
-
                   int grandTotal =
                       int.tryParse(
                         data['totalPrice']?.toString() ??
@@ -89,11 +100,7 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                             '0',
                       ) ??
                       0;
-                  int baseServicePrice = grandTotal - addonTotal;
-                  if (baseServicePrice < 0) baseServicePrice = 0;
-
                   calculatedTotalEarnings += grandTotal;
-
                   completedJobs.add({
                     'date': data['date'] ?? 'Unknown Date',
                     'parentName':
@@ -101,14 +108,10 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                         data['clientName'] ??
                         'Client Parent',
                     'totalPrice': grandTotal,
-                    'basePrice': baseServicePrice,
-                    'addonTotal': addonTotal,
-                    'addons': addonItems,
                     'time': data['time'] ?? '',
                   });
                 }
               }
-
               int displayTotal = calculatedTotalEarnings > 0
                   ? calculatedTotalEarnings
                   : totalEarnings;
@@ -124,7 +127,7 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                         height: 4,
                         margin: const EdgeInsets.only(bottom: 20),
                         decoration: BoxDecoration(
-                          color: AppColors.lightGray,
+                          color: AppColors.border,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -132,23 +135,13 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Row(
-                          children: [
-                            Icon(
-                              Icons.account_balance_wallet_rounded,
-                              color: AppColors.primary,
-                              size: 24,
-                            ),
-                            SizedBox(width: 8),
-                            Text(
-                              "Earnings Breakdown",
-                              style: TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.dark,
-                              ),
-                            ),
-                          ],
+                        const Text(
+                          "Earnings Summary",
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.dark,
+                          ),
                         ),
                         IconButton(
                           icon: const Icon(Icons.close, color: AppColors.gray),
@@ -156,20 +149,26 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                         ),
                       ],
                     ),
-                    const Divider(height: 24),
-
+                    const SizedBox(height: 16),
                     Container(
                       width: double.infinity,
-                      padding: const EdgeInsets.all(18),
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: AppColors.dark,
-                        borderRadius: BorderRadius.circular(18),
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(20),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withOpacity(0.3),
+                            blurRadius: 16,
+                            offset: const Offset(0, 6),
+                          ),
+                        ],
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text(
-                            "Total Net Earnings",
+                            "Net Revenue",
                             style: TextStyle(
                               color: Colors.white70,
                               fontWeight: FontWeight.w600,
@@ -180,7 +179,7 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                             "RM $displayTotal.00",
                             style: const TextStyle(
                               color: Colors.white,
-                              fontSize: 22,
+                              fontSize: 24,
                               fontWeight: FontWeight.w900,
                             ),
                           ),
@@ -188,208 +187,70 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 20),
-
                     const Text(
-                      "Payout History by Date:",
+                      "Payout History",
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 15,
                         color: AppColors.dark,
                       ),
                     ),
-                    const SizedBox(height: 12),
-
+                    const SizedBox(height: 10),
                     if (completedJobs.isEmpty)
                       Container(
-                        width: double.infinity,
                         padding: const EdgeInsets.symmetric(vertical: 30),
                         alignment: Alignment.center,
                         child: const Text(
-                          "No completed earnings records found.",
-                          style: TextStyle(
-                            color: AppColors.gray,
-                            fontSize: 13,
-                            fontStyle: FontStyle.italic,
-                          ),
+                          "No completed orders yet.",
+                          style: TextStyle(color: AppColors.gray, fontSize: 13),
                         ),
                       )
                     else
-                      ListView.builder(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        itemCount: completedJobs.length,
-                        itemBuilder: (context, index) {
-                          final job = completedJobs[index];
-                          final List<Map<String, dynamic>> addons =
-                              List<Map<String, dynamic>>.from(job['addons']);
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 14),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: AppColors.lightGray,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(color: Colors.grey[200]!),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment:
-                                      MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.calendar_today_rounded,
-                                          size: 14,
-                                          color: AppColors.primary,
-                                        ),
-                                        const SizedBox(width: 6),
-                                        Text(
-                                          job['date'],
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            fontSize: 14,
-                                            color: AppColors.dark,
-                                          ),
-                                        ),
-                                      ],
+                      ...completedJobs.map(
+                        (job) => Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          padding: const EdgeInsets.all(14),
+                          decoration: BoxDecoration(
+                            color: AppColors.lightGray,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppColors.border),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    job['date'],
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                      color: AppColors.dark,
                                     ),
-                                    Text(
-                                      "+RM ${job['totalPrice']}.00",
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w900,
-                                        fontSize: 16,
-                                        color: AppColors.primary,
-                                      ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    "Client: ${job['parentName']}",
+                                    style: const TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.gray,
                                     ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text(
-                                  "Client: ${job['parentName']} (${job['time']})",
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.gray,
                                   ),
-                                ),
-                                const Divider(
-                                  height: 20,
-                                  color: Color(0xFFE2E8F0),
-                                ),
-
-                                // 💡 基础服务费 (加防溢出)
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 2,
-                                  ),
-                                  child: Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      const Row(
-                                        children: [
-                                          Icon(
-                                            Icons.child_care,
-                                            size: 14,
-                                            color: AppColors.gray,
-                                          ),
-                                          SizedBox(width: 6),
-                                          Text(
-                                            "Base Care Service",
-                                            style: TextStyle(
-                                              fontSize: 13,
-                                              color: AppColors.dark,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      Text(
-                                        "RM ${job['basePrice']}.00",
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w600,
-                                          color: AppColors.dark,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-
-                                // 💡 修复重点：Add-on 服务超长文本加 Expanded 防溢出！
-                                if (addons.isNotEmpty) ...[
-                                  const SizedBox(height: 6),
-                                  ...addons.map((addon) {
-                                    return Padding(
-                                      padding: const EdgeInsets.symmetric(
-                                        vertical: 2,
-                                      ),
-                                      child: Row(
-                                        mainAxisAlignment:
-                                            MainAxisAlignment.spaceBetween,
-                                        children: [
-                                          Expanded(
-                                            child: Row(
-                                              children: [
-                                                const Icon(
-                                                  Icons.add_circle_outline,
-                                                  size: 14,
-                                                  color: AppColors.primary,
-                                                ),
-                                                const SizedBox(width: 6),
-                                                Expanded(
-                                                  child: Text(
-                                                    "Add-on: ${addon['name']}",
-                                                    style: const TextStyle(
-                                                      fontSize: 13,
-                                                      color: AppColors.dark,
-                                                    ),
-                                                    overflow:
-                                                        TextOverflow.ellipsis,
-                                                    maxLines: 1,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            "+RM ${addon['price']}.00",
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              fontWeight: FontWeight.bold,
-                                              color: AppColors.primary,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    );
-                                  }),
                                 ],
-                              ],
-                            ),
-                          );
-                        },
-                      ),
-
-                    const SizedBox(height: 16),
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.dark,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
+                              ),
+                              Text(
+                                "+RM ${job['totalPrice']}.00",
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w900,
+                                  fontSize: 15,
+                                  color: AppColors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        minimumSize: const Size(double.infinity, 48),
                       ),
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text(
-                        "Close Breakdown",
-                        style: TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                    ),
                   ],
                 ),
               );
@@ -423,16 +284,34 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
           }
           var userData =
               userSnapshot.data!.data() as Map<String, dynamic>? ?? {};
-          bool isOnline = userData['isOnline'] ?? false;
-          int totalEarnings =
+
+          // 核心校验：必须明确为 true，如果是 null 或 false 统统视为未认证
+          final bool isKycVerified = userData['isKycVerified'] == true;
+          bool rawIsOnline = userData['isOnline'] ?? false;
+
+          // 强制纠偏：如果用户没通过 KYC 却在数据库里记录着 isOnline=true，立刻在后台修正为 false
+          if (!isKycVerified && rawIsOnline) {
+            WidgetsBinding.instance.addPostFrameCallback((_) {
+              FirestoreService.updateNannyStatus(false);
+            });
+            rawIsOnline = false;
+          }
+
+          // 最终页面呈现的在线状态：必须同时满足 KYC 认证成功 + 在线开
+          final bool effectiveOnline = isKycVerified && rawIsOnline;
+          final int totalEarnings =
               int.tryParse(userData['total_earnings']?.toString() ?? '0') ?? 0;
 
           return SingleChildScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.symmetric(
+              horizontal: 20.0,
+              vertical: 16.0,
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 顶部在线切换条
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
@@ -440,30 +319,41 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          "${userData['name'] ?? 'Caregiver'}, Welcome back!",
+                          "${userData['name'] ?? 'Caregiver'} 👩‍⚕️",
                           style: const TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
                             color: AppColors.dark,
                           ),
                         ),
+                        const SizedBox(height: 4),
                         Row(
                           children: [
-                            const Text(
-                              "You are currently ",
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: AppColors.gray,
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: effectiveOnline
+                                    ? AppColors.success
+                                    : AppColors.muted,
+                                shape: BoxShape.circle,
                               ),
                             ),
+                            const SizedBox(width: 6),
                             Text(
-                              isOnline ? "Online" : "Offline",
+                              effectiveOnline
+                                  ? "Accepting Jobs (Online)"
+                                  : (!isKycVerified
+                                        ? "Offline (KYC Required)"
+                                        : "Paused (Offline)"),
                               style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.bold,
-                                color: isOnline
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: effectiveOnline
                                     ? AppColors.success
-                                    : AppColors.gray,
+                                    : (isKycVerified
+                                          ? AppColors.gray
+                                          : const Color(0xFFD97706)),
                               ),
                             ),
                           ],
@@ -471,67 +361,142 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                       ],
                     ),
                     Switch(
-                      value: isOnline,
+                      value: effectiveOnline,
                       activeColor: AppColors.success,
-                      onChanged: (val) async {
-                        await FirestoreService.updateNannyStatus(val);
-                      },
+                      // 点击直接走拦截判断
+                      onChanged: (val) => _onToggleSwitch(isKycVerified, val),
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFF7ED),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: const Color(0xFFFFEDD5)),
+                const SizedBox(height: 16),
+
+                // 未认证 KYC 醒目提示横幅
+                if (!isKycVerified) ...[
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFFFFBEB),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: const Color(0xFFFDE68A)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: const BoxDecoration(
+                            color: Color(0xFFD97706),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.shield_outlined,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Identity Verification Pending",
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 13,
+                                  color: Color(0xFF92400E),
+                                ),
+                              ),
+                              Text(
+                                "Complete KYC to enable Online status & get jobs.",
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Color(0xFFB45309),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        ElevatedButton(
+                          onPressed: () async {
+                            bool? done =
+                                await KycDialogHelper.showSimulatedKycSheet(
+                                  context,
+                                );
+                            if (done == true && mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    "KYC Verified! You can now switch Online.",
+                                  ),
+                                  backgroundColor: AppColors.success,
+                                ),
+                              );
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFD97706),
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text(
+                            "Verify",
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                  child: Row(
+                  const SizedBox(height: 16),
+                ],
+
+                // SDG 8 理念胶囊卡
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryLight.withOpacity(0.5),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: AppColors.primary.withOpacity(0.2),
+                    ),
+                  ),
+                  child: const Row(
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFFF97316),
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.handshake,
-                          color: Colors.white,
-                          size: 24,
-                        ),
+                      Icon(
+                        Icons.handshake_rounded,
+                        color: AppColors.primary,
+                        size: 22,
                       ),
-                      const SizedBox(width: 15),
-                      const Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              "Empowering Caregivers",
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Color(0xFF9A3412),
-                              ),
-                            ),
-                            Text(
-                              "Supporting SDG 8: Decent Work & Economic Growth by ensuring fair wages.",
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Color(0xFFC2410C),
-                              ),
-                            ),
-                          ],
+                      SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          "Aligned with SDG 8: Fair wages and transparent care economy.",
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
                         ),
                       ),
                     ],
                   ),
                 ),
-                const SizedBox(height: 25),
+                const SizedBox(height: 20),
 
+                // 统计卡片
                 GestureDetector(
                   onTap: () => _showEarningsBreakdownSheet(uid, totalEarnings),
                   child: Container(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(22),
                     decoration: BoxDecoration(
                       color: AppColors.dark,
                       borderRadius: BorderRadius.circular(24),
@@ -543,115 +508,83 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Text(
-                              "Total Earnings (Click for details)",
+                            const Text(
+                              "Total Earnings",
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.7),
-                                fontSize: 14,
+                                color: Colors.white70,
+                                fontSize: 13,
                               ),
                             ),
-                            Container(
-                              padding: const EdgeInsets.all(6),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.15),
-                                shape: BoxShape.circle,
+                            GestureDetector(
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) =>
+                                      const NannyReviewsScreen(),
+                                ),
                               ),
-                              child: const Icon(
-                                Icons.account_balance_wallet,
-                                color: Colors.white,
-                                size: 22,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 10,
+                                  vertical: 4,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: Colors.white12,
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(color: Colors.white24),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(
+                                      Icons.star_rounded,
+                                      color: AppColors.accent,
+                                      size: 16,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      "${userData['rating'] ?? '5.0'}",
+                                      style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    const Icon(
+                                      Icons.chevron_right_rounded,
+                                      color: Colors.white70,
+                                      size: 14,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ],
                         ),
                         const SizedBox(height: 10),
-                        Row(
+                        Text(
+                          "RM $totalEarnings.00",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 34,
+                            fontWeight: FontWeight.w900,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 14),
+                        const Row(
                           children: [
-                            Text(
-                              "RM $totalEarnings.00",
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 36,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                            const SizedBox(width: 10),
-                            const Icon(
+                            Icon(
                               Icons.info_outline_rounded,
                               color: Colors.white54,
-                              size: 18,
+                              size: 14,
                             ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: AppColors.success.withOpacity(0.2),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: const Text(
-                                "  Secure Parent Verification",
-                                style: TextStyle(
-                                  color: AppColors.success,
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                            GestureDetector(
-                              onTap: () {
-                                Navigator.push(
-                                  context,
-                                  MaterialPageRoute(
-                                    builder: (context) =>
-                                        const NannyReviewsScreen(),
-                                  ),
-                                );
-                              },
-                              child: MouseRegion(
-                                cursor: SystemMouseCursors.click,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 10,
-                                    vertical: 4,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(10),
-                                    border: Border.all(color: Colors.white24),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const Icon(
-                                        Icons.star,
-                                        color: AppColors.accent,
-                                        size: 16,
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        "${userData['rating'] ?? '5.0'} Rating",
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      const Icon(
-                                        Icons.chevron_right,
-                                        color: Colors.white70,
-                                        size: 14,
-                                      ),
-                                    ],
-                                  ),
-                                ),
+                            SizedBox(width: 6),
+                            Text(
+                              "Tap to view complete payout analytics",
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 12,
                               ),
                             ),
                           ],
@@ -660,27 +593,48 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                     ),
                   ),
                 ),
-                const SizedBox(height: 25),
+                const SizedBox(height: 28),
+
                 const Text(
-                  "Active Job Opportunities",
+                  "Active Job Demands",
                   style: TextStyle(
                     fontSize: 18,
-                    fontWeight: FontWeight.w700,
+                    fontWeight: FontWeight.w800,
                     color: AppColors.dark,
                   ),
                 ),
-                const SizedBox(height: 15),
-                if (!isOnline)
-                  const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(20.0),
-                      child: Text(
-                        "You are offline. Go online to receive job offers.",
-                        style: TextStyle(
-                          color: AppColors.gray,
-                          fontStyle: FontStyle.italic,
+                const SizedBox(height: 14),
+
+                if (!effectiveOnline)
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(32),
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: AppColors.border),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          !isKycVerified
+                              ? Icons.lock_outline_rounded
+                              : Icons.bedtime_outlined,
+                          color: AppColors.muted,
+                          size: 40,
                         ),
-                      ),
+                        const SizedBox(height: 10),
+                        Text(
+                          !isKycVerified
+                              ? "Identity Verification (KYC) required before going online."
+                              : "You are offline. Turn switch ON to get requests.",
+                          style: const TextStyle(
+                            color: AppColors.gray,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
                     ),
                   )
                 else
@@ -691,15 +645,9 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                         return const Center(
                           child: Padding(
                             padding: EdgeInsets.all(20),
-                            child: CircularProgressIndicator(),
-                          ),
-                        );
-                      }
-                      if (snapshot.hasError) {
-                        return Center(
-                          child: Text(
-                            "Error: ${snapshot.error}",
-                            style: const TextStyle(color: AppColors.danger),
+                            child: CircularProgressIndicator(
+                              color: AppColors.primary,
+                            ),
                           ),
                         );
                       }
@@ -713,28 +661,29 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                                         'Completed (Pending Verification)',
                               )
                               .toList();
+
                       if (activeJobs.isEmpty) {
                         return Container(
                           width: double.infinity,
                           padding: const EdgeInsets.symmetric(vertical: 40),
                           decoration: BoxDecoration(
-                            color: AppColors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.lightGray),
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: AppColors.border),
                           ),
                           child: const Column(
                             children: [
                               Icon(
-                                Icons.inbox_outlined,
-                                size: 48,
-                                color: AppColors.gray,
+                                Icons.inbox_rounded,
+                                size: 44,
+                                color: AppColors.muted,
                               ),
-                              SizedBox(height: 10),
+                              SizedBox(height: 8),
                               Text(
-                                "No active job requests at the moment.",
+                                "No active job requests right now.",
                                 style: TextStyle(
                                   color: AppColors.gray,
-                                  fontWeight: FontWeight.w500,
+                                  fontSize: 13,
                                 ),
                               ),
                             ],
@@ -743,7 +692,7 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                       }
                       return Column(
                         children: activeJobs
-                            .map((job) => _buildJobCard(job, uid))
+                            .map((job) => _buildNannyJobCard(job))
                             .toList(),
                       );
                     },
@@ -757,21 +706,18 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
     );
   }
 
-  Widget _buildJobCard(Map<String, dynamic> job, String nannyUid) {
+  Widget _buildNannyJobCard(Map<String, dynamic> job) {
     String status = job['status'] ?? 'Pending';
     bool isPending = status == 'Pending';
     bool isConfirmed = status == 'Confirmed';
-    bool isWaitingVerify = status == 'Completed (Pending Verification)';
-    Color cardHeaderColor = AppColors.dark;
-    if (isConfirmed) cardHeaderColor = AppColors.primary;
-    if (isWaitingVerify) cardHeaderColor = const Color(0xFFD97706);
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.only(bottom: 14),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: AppColors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppColors.border),
         boxShadow: AppColors.cardShadow,
       ),
       child: Column(
@@ -779,34 +725,13 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      isPending
-                          ? "New Booking Request"
-                          : (isConfirmed
-                                ? "Ongoing Service Job"
-                                : "Awaiting Parent Payout"),
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: cardHeaderColor,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      job['date'] ?? '',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ],
+              Text(
+                job['date'] ?? '',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 16,
+                  color: AppColors.dark,
                 ),
               ),
               Container(
@@ -816,111 +741,86 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                 ),
                 decoration: BoxDecoration(
                   color: isPending
-                      ? const Color(0xFFFEF08A)
-                      : (isConfirmed
-                            ? const Color(0xFFE0F2FE)
-                            : const Color(0xFFFEF3C7)),
-                  borderRadius: BorderRadius.circular(8),
+                      ? const Color(0xFFFEF3C7)
+                      : const Color(0xFFE0F2FE),
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Text(
-                  isWaitingVerify ? "Pending Payout" : status,
+                  status,
                   style: TextStyle(
                     color: isPending
-                        ? const Color(0xFF854D0E)
-                        : (isConfirmed
-                              ? const Color(0xFF0369A1)
-                              : const Color(0xFFB45309)),
-                    fontWeight: FontWeight.bold,
+                        ? const Color(0xFFB45309)
+                        : const Color(0xFF0369A1),
+                    fontWeight: FontWeight.w800,
                     fontSize: 11,
                   ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.access_time, size: 16, color: AppColors.gray),
-              const SizedBox(width: 6),
-              Text(
-                job['time'] ?? '',
-                style: const TextStyle(fontSize: 13, color: AppColors.dark),
-              ),
-            ],
+          const SizedBox(height: 8),
+          Text(
+            job['time'] ?? '',
+            style: const TextStyle(color: AppColors.gray, fontSize: 13),
           ),
-          const SizedBox(height: 10),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: AppColors.lightGray,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Text(
-              job['notes'] ?? '',
-              style: const TextStyle(
-                fontSize: 13,
-                color: Color(0xFF475569),
-                height: 1.4,
+          if ((job['notes'] ?? '').isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: AppColors.lightGray,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                job['notes'],
+                style: const TextStyle(fontSize: 12, color: AppColors.body),
               ),
             ),
-          ),
-          const SizedBox(height: 15),
+          ],
+          const SizedBox(height: 16),
           Row(
             children: [
               if (isPending) ...[
                 Expanded(
-                  child: OutlinedButton.icon(
+                  child: OutlinedButton(
                     onPressed: () async => await FirestoreService.updateBooking(
                       job['docId'],
                       {'status': 'Cancelled'},
                     ),
-                    icon: const Icon(
-                      Icons.close,
-                      color: AppColors.danger,
-                      size: 18,
-                    ),
-                    label: const Text(
-                      "Decline",
-                      style: TextStyle(
-                        color: AppColors.danger,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
                     style: OutlinedButton.styleFrom(
                       side: const BorderSide(color: AppColors.danger),
+                      foregroundColor: AppColors.danger,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
+                    child: const Text(
+                      "Decline",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                   ),
                 ),
-                const SizedBox(width: 12),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: ElevatedButton.icon(
+                  child: ElevatedButton(
                     onPressed: () async => await FirestoreService.updateBooking(
                       job['docId'],
                       {'status': 'Confirmed'},
                     ),
-                    icon: const Icon(
-                      Icons.check_circle_outline,
-                      color: Colors.white,
-                      size: 18,
-                    ),
-                    label: const Text(
-                      "Accept",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 0,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                       ),
                       padding: const EdgeInsets.symmetric(vertical: 12),
+                    ),
+                    child: const Text(
+                      "Accept",
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                   ),
                 ),
@@ -931,64 +831,44 @@ class _NannyHomeScreenState extends State<NannyHomeScreen> {
                       await FirestoreService.requestCompleteBooking(
                         job['docId'],
                       );
-                      if (context.mounted) {
+                      if (mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           const SnackBar(
                             content: Text(
-                              "Completion request sent! Waiting for parent confirmation.",
+                              "Submitted! Awaiting parent verification.",
                             ),
-                            backgroundColor: AppColors.primary,
                           ),
                         );
                       }
                     },
                     icon: const Icon(
-                      Icons.send_rounded,
+                      Icons.check_circle_outline,
+                      size: 16,
                       color: Colors.white,
-                      size: 18,
                     ),
                     label: const Text(
-                      "Submit For Verification",
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                      ),
+                      "Complete Service & Request Payout",
+                      style: TextStyle(fontWeight: FontWeight.bold),
                     ),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10),
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
                     ),
                   ),
                 ),
               ] else ...[
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    decoration: BoxDecoration(
-                      color: AppColors.lightGray,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: const Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.hourglass_empty,
-                          size: 16,
-                          color: AppColors.gray,
-                        ),
-                        SizedBox(width: 8),
-                        Text(
-                          "Waiting for Parent to click 'Confirm Payout'...",
-                          style: TextStyle(
-                            color: AppColors.gray,
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      "Pending parent payout confirmation...",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppColors.gray,
+                        fontStyle: FontStyle.italic,
+                      ),
                     ),
                   ),
                 ),

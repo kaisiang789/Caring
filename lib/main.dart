@@ -26,17 +26,25 @@ class NannyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      title: 'Nanny App',
+      title: 'NannyApp',
       theme: ThemeData(
         scaffoldBackgroundColor: AppColors.background,
         primaryColor: AppColors.primary,
+        fontFamily: 'Roboto',
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: AppColors.primary,
+          primary: AppColors.primary,
+          background: AppColors.background,
+        ),
       ),
       home: StreamBuilder<User?>(
         stream: AuthService().userStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Scaffold(
-              body: Center(child: CircularProgressIndicator()),
+              body: Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              ),
             );
           }
           if (snapshot.hasData) return const MainLayout();
@@ -73,12 +81,10 @@ class _MainLayoutState extends State<MainLayout> {
             .collection('users')
             .doc(uid)
             .get();
-        if (doc.exists && doc.data() != null) {
-          if (mounted) {
-            setState(() {
-              _isNannyMode = doc.data()!['role'] == 'Nanny';
-            });
-          }
+        if (doc.exists && doc.data() != null && mounted) {
+          setState(() {
+            _isNannyMode = doc.data()!['role'] == 'Nanny';
+          });
         }
       } catch (e) {
         debugPrint("Failed to get user identity: $e");
@@ -86,9 +92,7 @@ class _MainLayoutState extends State<MainLayout> {
     }
   }
 
-  void _toggleRole() {
-    // Keep empty method aligned to prevent compilation errors
-  }
+  void _toggleRole() {}
 
   void _updatePreferences(List<String> newPrefs) {
     setState(() => _globalPreferences = newPrefs);
@@ -152,83 +156,98 @@ class _MainLayoutState extends State<MainLayout> {
                 }
               }
 
-              return BottomNavigationBar(
-                currentIndex: _currentIndex,
-                onTap: (index) => setState(() => _currentIndex = index),
-                type: BottomNavigationBarType.fixed,
-                backgroundColor: AppColors.white,
-                selectedItemColor: AppColors.primary,
-                unselectedItemColor: const Color(0xFF94A3B8),
-                items: [
-                  const BottomNavigationBarItem(
-                    icon: Icon(Icons.home_outlined),
-                    activeIcon: Icon(Icons.home),
-                    label: 'Home',
+              return Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.dark.withOpacity(0.04),
+                      blurRadius: 16,
+                      offset: const Offset(0, -4),
+                    ),
+                  ],
+                ),
+                child: BottomNavigationBar(
+                  currentIndex: _currentIndex,
+                  onTap: (index) => setState(() => _currentIndex = index),
+                  type: BottomNavigationBarType.fixed,
+                  elevation: 0,
+                  backgroundColor: Colors.white,
+                  selectedItemColor: AppColors.primary,
+                  unselectedItemColor: AppColors.muted,
+                  selectedLabelStyle: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11,
                   ),
-                  if (!_isNannyMode)
+                  unselectedLabelStyle: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 11,
+                  ),
+                  items: [
                     const BottomNavigationBarItem(
-                      icon: Icon(Icons.search_outlined),
-                      activeIcon: Icon(Icons.search),
-                      label: 'Search',
+                      icon: Icon(Icons.home_outlined),
+                      activeIcon: Icon(Icons.home_rounded),
+                      label: 'Home',
                     ),
-                  BottomNavigationBarItem(
-                    icon: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        const Icon(Icons.chat_bubble_outline),
-                        if (globalHasUnread)
-                          Positioned(
-                            right: -4,
-                            top: -4,
-                            child: Container(
-                              padding: const EdgeInsets.all(1),
-                              decoration: const BoxDecoration(
-                                color: AppColors.danger,
-                                shape: BoxShape.circle,
-                              ),
-                              constraints: const BoxConstraints(
-                                minWidth: 10,
-                                minHeight: 10,
+                    if (!_isNannyMode)
+                      const BottomNavigationBarItem(
+                        icon: Icon(Icons.search_rounded),
+                        activeIcon: Icon(Icons.manage_search_rounded),
+                        label: 'Explore',
+                      ),
+                    BottomNavigationBarItem(
+                      icon: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          const Icon(Icons.chat_bubble_outline_rounded),
+                          if (globalHasUnread)
+                            Positioned(
+                              right: -2,
+                              top: -2,
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: AppColors.danger,
+                                  shape: BoxShape.circle,
+                                ),
                               ),
                             ),
-                          ),
-                      ],
-                    ),
-                    activeIcon: Stack(
-                      clipBehavior: Clip.none,
-                      children: [
-                        const Icon(Icons.chat_bubble),
-                        if (globalHasUnread)
-                          Positioned(
-                            right: -4,
-                            top: -4,
-                            child: Container(
-                              padding: const EdgeInsets.all(1),
-                              decoration: const BoxDecoration(
-                                color: AppColors.danger,
-                                shape: BoxShape.circle,
-                              ),
-                              constraints: const BoxConstraints(
-                                minWidth: 10,
-                                minHeight: 10,
+                        ],
+                      ),
+                      activeIcon: Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          const Icon(Icons.chat_bubble_rounded),
+                          if (globalHasUnread)
+                            Positioned(
+                              right: -2,
+                              top: -2,
+                              child: Container(
+                                width: 8,
+                                height: 8,
+                                decoration: const BoxDecoration(
+                                  color: AppColors.danger,
+                                  shape: BoxShape.circle,
+                                ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
+                      label: 'Messages',
                     ),
-                    label: 'Chat',
-                  ),
-                  const BottomNavigationBarItem(
-                    icon: Icon(Icons.calendar_today_outlined),
-                    activeIcon: Icon(Icons.calendar_today),
-                    label: 'Bookings',
-                  ),
-                  const BottomNavigationBarItem(
-                    icon: Icon(Icons.person_outline),
-                    activeIcon: Icon(Icons.person),
-                    label: 'Me',
-                  ),
-                ],
+                    const BottomNavigationBarItem(
+                      icon: Icon(Icons.calendar_month_outlined),
+                      activeIcon: Icon(Icons.calendar_month_rounded),
+                      label: 'Bookings',
+                    ),
+                    const BottomNavigationBarItem(
+                      icon: Icon(Icons.person_outline_rounded),
+                      activeIcon: Icon(Icons.person_rounded),
+                      label: 'Profile',
+                    ),
+                  ],
+                ),
               );
             },
           ),

@@ -5,6 +5,7 @@ import '../core/theme.dart';
 import 'edit_profile_screen.dart';
 import '../services/auth_service.dart';
 import 'help_support_screen.dart';
+import '../widgets/kyc_dialog.dart';
 
 class MeScreen extends StatefulWidget {
   final bool isNannyMode;
@@ -47,20 +48,19 @@ class _MeScreenState extends State<MeScreen> {
           .collection('users')
           .doc(currentUser!.uid)
           .update(result);
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text("Account updated in cloud!"),
             backgroundColor: AppColors.success,
           ),
         );
+      }
     }
   }
 
   void _showPreferencesDialog() {
     List<String> tempPrefs = List.from(widget.userPreferences);
-
-    // Highlight fix: Use the exact same skill tag library as nanny registration/editing here, as parent preference filter options!
     final List<String> availableTagOptions = [
       "Cooking",
       "Outdoor",
@@ -70,7 +70,7 @@ class _MeScreenState extends State<MeScreen> {
       "Premium",
       "Newborn",
       "First-Aid Certified",
-      "Chinese", // Additional skills nannies might add themselves
+      "Chinese",
       "Malay",
     ];
 
@@ -81,12 +81,12 @@ class _MeScreenState extends State<MeScreen> {
           return AlertDialog(
             backgroundColor: Colors.white,
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(24),
             ),
             title: const Text(
-              "Set Preferences",
+              "Care Preferences",
               style: TextStyle(
-                fontWeight: FontWeight.bold,
+                fontWeight: FontWeight.w900,
                 color: AppColors.dark,
               ),
             ),
@@ -98,7 +98,11 @@ class _MeScreenState extends State<MeScreen> {
                   return CheckboxListTile(
                     title: Text(
                       option,
-                      style: const TextStyle(color: AppColors.dark),
+                      style: const TextStyle(
+                        fontSize: 14,
+                        color: AppColors.dark,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
                     activeColor: AppColors.primary,
                     value: tempPrefs.contains(option),
@@ -127,15 +131,12 @@ class _MeScreenState extends State<MeScreen> {
                 onPressed: () {
                   widget.onUpdatePreferences(tempPrefs);
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text("Preferences Saved!"),
-                      backgroundColor: AppColors.success,
-                    ),
-                  );
                 },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
                 child: const Text(
                   "Save",
@@ -155,24 +156,16 @@ class _MeScreenState extends State<MeScreen> {
       builder: (context) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(
-              Icons.warning_amber_rounded,
-              color: AppColors.danger,
-              size: 28,
-            ),
-            SizedBox(width: 10),
-            Text(
-              "Log Out",
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: AppColors.danger,
-              ),
-            ),
-          ],
+        title: const Text(
+          "Log Out",
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: AppColors.danger,
+          ),
         ),
-        content: const Text("Are you sure you want to log out?"),
+        content: const Text(
+          "Are you sure you want to sign out of your account?",
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
@@ -202,179 +195,289 @@ class _MeScreenState extends State<MeScreen> {
           .snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting)
-          return const Center(child: CircularProgressIndicator());
+          return const Center(
+            child: CircularProgressIndicator(color: AppColors.primary),
+          );
         if (!snapshot.hasData || !snapshot.data!.exists)
           return const Center(child: Text("User data not found"));
 
         Map<String, dynamic> userData =
             snapshot.data!.data() as Map<String, dynamic>;
         String currentName = userData['name'] ?? "Unknown";
-        String currentRole = widget.isNannyMode ? "Nanny" : "Parent";
+        String currentRole = widget.isNannyMode ? "Caregiver" : "Parent";
         String avatarUrl =
             userData['image'] ??
             "https://api.dicebear.com/7.x/avataaars/png?seed=$currentName";
 
-        return RefreshIndicator(
-          color: AppColors.primary,
-          backgroundColor: Colors.white,
-          onRefresh: () async => setState(() {}),
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: Column(
-              children: [
-                const SizedBox(height: 30),
-                Center(
-                  child: Column(
-                    children: [
-                      Container(
-                        width: 100,
-                        height: 100,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          border: Border.all(color: AppColors.white, width: 4),
-                          boxShadow: AppColors.cardShadow,
-                          image: DecorationImage(
-                            image: NetworkImage(avatarUrl),
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 15),
-                      Text(
-                        currentName,
-                        style: const TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: AppColors.dark,
-                        ),
-                      ),
-                      const SizedBox(height: 5),
-                      Text(
-                        currentRole,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 30),
+        // 核心兼容：现有未设置该字段的老保姆，默认都是未认证 (false)
+        bool isKycVerified = userData['isKycVerified'] == true;
 
-                // Menu list panel
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: AppColors.white,
-                      borderRadius: BorderRadius.circular(20),
-                      boxShadow: AppColors.cardShadow,
-                    ),
-                    child: Column(
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          child: Column(
+            children: [
+              // 用户基本信息大卡片
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: AppColors.border),
+                  boxShadow: AppColors.cardShadow,
+                ),
+                child: Column(
+                  children: [
+                    Stack(
                       children: [
-                        _buildMenuItem(
-                          icon: Icons.manage_accounts_outlined,
-                          color: AppColors.primary,
-                          title: "Account Settings",
-                          onTap: () => _navigateToEditAccount(userData),
-                        ),
-                        _buildDivider(),
-                        if (!widget.isNannyMode) ...[
-                          _buildMenuItem(
-                            icon: Icons.tune,
-                            color: AppColors.primary,
-                            title: "Set Preferences",
-                            trailingText:
-                                "${widget.userPreferences.length} Selected",
-                            onTap: _showPreferencesDialog,
-                          ),
-                          _buildDivider(),
-                        ],
-                        _buildMenuItem(
-                          icon: Icons.support_agent,
-                          color: AppColors.dark,
-                          title: "Help & Support",
-                          onTap: () => Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const HelpSupportScreen(),
+                        Container(
+                          width: 84,
+                          height: 84,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.primaryLight,
+                              width: 3,
+                            ),
+                            image: DecorationImage(
+                              image: NetworkImage(avatarUrl),
+                              fit: BoxFit.cover,
                             ),
                           ),
                         ),
-                        _buildDivider(),
-                        _buildMenuItem(
-                          icon: Icons.logout,
-                          color: AppColors.danger,
-                          title: "Log Out",
-                          hideChevron: true,
-                          onTap: _showLogoutDialog,
-                        ),
+                        if (widget.isNannyMode)
+                          Positioned(
+                            bottom: 0,
+                            right: 0,
+                            child: Container(
+                              padding: const EdgeInsets.all(4),
+                              decoration: BoxDecoration(
+                                color: isKycVerified
+                                    ? AppColors.success
+                                    : const Color(0xFFD97706),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: Colors.white,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Icon(
+                                isKycVerified
+                                    ? Icons.verified_rounded
+                                    : Icons.priority_high_rounded,
+                                color: Colors.white,
+                                size: 14,
+                              ),
+                            ),
+                          ),
                       ],
                     ),
-                  ),
+                    const SizedBox(height: 12),
+                    Text(
+                      currentName,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: AppColors.dark,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryLight,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            currentRole,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ),
+                        if (widget.isNannyMode) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: isKycVerified
+                                  ? const Color(0xFFDCFCE7)
+                                  : const Color(0xFFFEF3C7),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              isKycVerified ? "Verified" : "KYC Required",
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: isKycVerified
+                                    ? const Color(0xFF15803D)
+                                    : const Color(0xFFB45309),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 40),
-              ],
-            ),
+              ),
+              const SizedBox(height: 20),
+
+              // 功能列表项
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: AppColors.border),
+                  boxShadow: AppColors.cardShadow,
+                ),
+                child: Column(
+                  children: [
+                    // 保姆专属的 KYC 认证按钮条
+                    if (widget.isNannyMode) ...[
+                      _buildRow(
+                        Icons.shield_outlined,
+                        "Identity Verification (KYC)",
+                        () async {
+                          if (isKycVerified) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text(
+                                  "Your identity is already fully verified!",
+                                ),
+                                backgroundColor: AppColors.success,
+                              ),
+                            );
+                          } else {
+                            bool? done =
+                                await KycDialogHelper.showSimulatedKycSheet(
+                                  context,
+                                );
+                            if (done == true && mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text("KYC Verified Successfully!"),
+                                  backgroundColor: AppColors.success,
+                                ),
+                              );
+                            }
+                          }
+                        },
+                        trailing: isKycVerified ? "Verified ✓" : "Verify Now",
+                        trailingColor: isKycVerified
+                            ? AppColors.success
+                            : const Color(0xFFD97706),
+                      ),
+                      const Divider(
+                        height: 1,
+                        indent: 55,
+                        color: AppColors.border,
+                      ),
+                    ],
+
+                    _buildRow(
+                      Icons.manage_accounts_outlined,
+                      "Account Settings",
+                      () => _navigateToEditAccount(userData),
+                    ),
+                    const Divider(
+                      height: 1,
+                      indent: 55,
+                      color: AppColors.border,
+                    ),
+                    if (!widget.isNannyMode) ...[
+                      _buildRow(
+                        Icons.tune_rounded,
+                        "Set Preferences",
+                        _showPreferencesDialog,
+                        trailing: "${widget.userPreferences.length} Active",
+                      ),
+                      const Divider(
+                        height: 1,
+                        indent: 55,
+                        color: AppColors.border,
+                      ),
+                    ],
+                    _buildRow(
+                      Icons.support_agent_rounded,
+                      "Help & Support",
+                      () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const HelpSupportScreen(),
+                        ),
+                      ),
+                    ),
+                    const Divider(
+                      height: 1,
+                      indent: 55,
+                      color: AppColors.border,
+                    ),
+                    _buildRow(
+                      Icons.logout_rounded,
+                      "Sign Out",
+                      _showLogoutDialog,
+                      isDanger: true,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         );
       },
     );
   }
 
-  Widget _buildMenuItem({
-    required IconData icon,
-    required Color color,
-    required String title,
-    String? trailingText,
-    bool hideChevron = false,
-    required VoidCallback onTap,
+  Widget _buildRow(
+    IconData icon,
+    String label,
+    VoidCallback onTap, {
+    String? trailing,
+    Color? trailingColor,
+    bool isDanger = false,
   }) {
-    return InkWell(
+    return ListTile(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-        child: Row(
-          children: [
-            Icon(icon, color: color, size: 22),
-            const SizedBox(width: 15),
-            Expanded(
-              child: Text(
-                title,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w500,
-                  color: color == AppColors.danger
-                      ? AppColors.danger
-                      : AppColors.dark,
-                ),
-              ),
-            ),
-            if (trailingText != null)
-              Text(
-                trailingText,
-                style: const TextStyle(
-                  color: AppColors.gray,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 13,
-                ),
-              ),
-            if (trailingText != null) const SizedBox(width: 8),
-            if (!hideChevron)
-              const Icon(Icons.chevron_right, color: AppColors.gray, size: 18),
-          ],
+      leading: Icon(
+        icon,
+        color: isDanger ? AppColors.danger : AppColors.dark,
+        size: 22,
+      ),
+      title: Text(
+        label,
+        style: TextStyle(
+          fontSize: 14,
+          fontWeight: FontWeight.w600,
+          color: isDanger ? AppColors.danger : AppColors.dark,
         ),
       ),
+      trailing: trailing != null
+          ? Text(
+              trailing,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                color: trailingColor ?? AppColors.primary,
+              ),
+            )
+          : const Icon(
+              Icons.chevron_right_rounded,
+              color: AppColors.muted,
+              size: 20,
+            ),
     );
   }
-
-  Widget _buildDivider() => const Divider(
-    height: 1,
-    thickness: 1,
-    color: AppColors.lightGray,
-    indent: 55,
-    endIndent: 20,
-  );
 }

@@ -12,18 +12,11 @@ class ParentHomeScreen extends StatefulWidget {
 }
 
 class _ParentHomeScreenState extends State<ParentHomeScreen> {
-  // Key for forcing StreamBuilder refresh
   Key _streamKey = UniqueKey();
 
   Future<void> _handleRefresh() async {
-    // Simulate network delay for smoother refresh animation
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (mounted) {
-      setState(() {
-        // Changing Key causes StreamBuilder to completely resubscribe to Firestore, achieving data refresh
-        _streamKey = UniqueKey();
-      });
-    }
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (mounted) setState(() => _streamKey = UniqueKey());
   }
 
   @override
@@ -31,14 +24,14 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
     return RefreshIndicator(
       color: AppColors.primary,
       backgroundColor: Colors.white,
-      onRefresh: _handleRefresh, // Trigger this function when pulling down
+      onRefresh: _handleRefresh,
       child: SingleChildScrollView(
-        // Key: Ensure pull-to-refresh gesture can be triggered even if content doesn't fill the screen
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.all(16.0),
+        padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // 顶部欢迎栏
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -46,113 +39,170 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: const [
                     Text(
-                      "Hello, Parent!  ",
+                      "Hello, Parent 👋",
                       style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.bold,
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
                         color: AppColors.dark,
+                        letterSpacing: -0.5,
                       ),
                     ),
+                    SizedBox(height: 4),
                     Text(
-                      "Find the perfect care.",
-                      style: TextStyle(fontSize: 14, color: AppColors.gray),
+                      "Find reliable, certified care for your family.",
+                      style: TextStyle(fontSize: 13, color: AppColors.gray),
                     ),
                   ],
                 ),
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: AppColors.white,
+                    color: Colors.white,
                     shape: BoxShape.circle,
+                    border: Border.all(color: AppColors.border, width: 0.8),
                     boxShadow: AppColors.cardShadow,
                   ),
                   child: const Icon(
-                    Icons.notifications_none,
+                    Icons.notifications_outlined,
                     color: AppColors.dark,
+                    size: 22,
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 25),
+            const SizedBox(height: 24),
+
+            // 比赛级优雅 Banner
             Container(
               width: double.infinity,
+              padding: const EdgeInsets.all(22),
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(24),
                 gradient: const LinearGradient(
-                  colors: [
-                    Color(0xFF6B21A8),
-                    Color(0xFF8B5CF6),
-                    Color(0xFF0D9488),
-                  ],
-                  begin: Alignment.topRight,
-                  end: Alignment.bottomLeft,
+                  colors: [Color(0xFF0F766E), Color(0xFF134E4A)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                boxShadow: AppColors.cardShadow,
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF0F766E).withOpacity(0.3),
+                    offset: const Offset(0, 10),
+                    blurRadius: 24,
+                  ),
+                ],
               ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      "Trusted Care\nFor Your Family",
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.18),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(color: Colors.white24, width: 0.8),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.verified_user_rounded,
+                          color: Colors.white,
+                          size: 13,
+                        ),
+                        SizedBox(width: 5),
+                        Text(
+                          "SDG 8 & Police Verified",
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text(
+                    "Trusted Childcare\nAt Your Fingertips",
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                      height: 1.25,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  ElevatedButton.icon(
+                    onPressed: widget.onNavigateToSearch,
+                    icon: const Icon(
+                      Icons.search_rounded,
+                      size: 18,
+                      color: AppColors.primary,
+                    ),
+                    label: const Text(
+                      "Explore Nannies",
                       style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 26,
-                        fontWeight: FontWeight.w800,
-                        height: 1.3,
-                      ),
-                    ),
-                    const SizedBox(height: 15),
-                    ElevatedButton.icon(
-                      onPressed: widget.onNavigateToSearch,
-                      icon: const Icon(
-                        Icons.search,
-                        size: 18,
                         color: AppColors.primary,
-                      ),
-                      label: const Text(
-                        "Find a Nanny",
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(30),
-                        ),
-                        elevation: 0,
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
                       ),
                     ),
-                  ],
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      elevation: 0,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 12,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 28),
+
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "Top Recommended",
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.dark,
+                    letterSpacing: -0.3,
+                  ),
                 ),
-              ),
+                TextButton(
+                  onPressed: widget.onNavigateToSearch,
+                  child: const Text(
+                    "View All",
+                    style: TextStyle(
+                      color: AppColors.primary,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 25),
-            const Text(
-              "Recommended Nannies",
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                color: AppColors.dark,
-              ),
-            ),
-            const SizedBox(height: 15),
+            const SizedBox(height: 12),
 
             StreamBuilder<List<Map<String, dynamic>>>(
-              key: _streamKey, // Bind dynamic Key
+              key: _streamKey,
               stream: FirestoreService.getNanniesStream(),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: Padding(
-                      padding: EdgeInsets.all(20),
+                      padding: EdgeInsets.all(30),
                       child: CircularProgressIndicator(
                         color: AppColors.primary,
                       ),
@@ -160,10 +210,13 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                   );
                 }
                 if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  return const Center(
-                    child: Text(
-                      "No nannies available yet.",
-                      style: TextStyle(color: AppColors.gray),
+                  return Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(vertical: 40),
+                    alignment: Alignment.center,
+                    child: const Text(
+                      "No caregivers available right now.",
+                      style: TextStyle(color: AppColors.gray, fontSize: 13),
                     ),
                   );
                 }
@@ -175,7 +228,6 @@ class _ParentHomeScreenState extends State<ParentHomeScreen> {
                 );
               },
             ),
-
             const SizedBox(height: 40),
           ],
         ),

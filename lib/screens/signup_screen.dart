@@ -5,6 +5,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:flutter/foundation.dart';
 import '../core/theme.dart';
+import '../widgets/kyc_dialog.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -15,14 +16,12 @@ class SignupScreen extends StatefulWidget {
 
 class _SignupScreenState extends State<SignupScreen> {
   final _formKey = GlobalKey<FormState>();
-
   final TextEditingController _nameController = TextEditingController();
   final TextEditingController _phoneController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
   final TextEditingController _rateController = TextEditingController();
   final TextEditingController _locationController = TextEditingController();
-
   String _selectedRole = 'Parent';
   bool _isLoading = false;
   bool _isGettingLocation = false;
@@ -40,22 +39,17 @@ class _SignupScreenState extends State<SignupScreen> {
     "Bilingual Teaching",
     "Emergency/Short-notice Care",
   ];
-
   final List<String> _selectedAddons = [];
 
   Future<void> _detectSignupLocation() async {
     setState(() => _isGettingLocation = true);
     if (kIsWeb) {
       await Future.delayed(const Duration(milliseconds: 600));
-      setState(() {
-        _locationController.text = "Skudai, Johor Bahru";
-      });
+      setState(() => _locationController.text = "Skudai, Johor Bahru");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text(
-              "Web Environment Detected: Location set to Skudai! 🌐",
-            ),
+            content: Text("Web Environment Detected: Location set to Skudai!"),
             backgroundColor: AppColors.success,
           ),
         );
@@ -63,7 +57,6 @@ class _SignupScreenState extends State<SignupScreen> {
       setState(() => _isGettingLocation = false);
       return;
     }
-
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
       if (!serviceEnabled) throw Exception('Location services are disabled.');
@@ -83,39 +76,17 @@ class _SignupScreenState extends State<SignupScreen> {
         position.latitude,
         position.longitude,
       );
-
       if (placemarks.isNotEmpty) {
         Placemark place = placemarks[0];
         String address =
             "${place.subLocality ?? place.street}, ${place.locality ?? place.administrativeArea}";
-        setState(() {
-          _locationController.text = address.replaceAll(RegExp(r'^, '), '');
-        });
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("GPS Location Detected!"),
-              backgroundColor: AppColors.success,
-            ),
-          );
-        }
-      } else {
-        setState(() {
-          _locationController.text = "Johor Bahru, Johor";
-        });
-      }
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _locationController.text = "Skudai, Johor";
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Location fallback used: Skudai"),
-            backgroundColor: AppColors.primary,
-          ),
+        setState(
+          () =>
+              _locationController.text = address.replaceAll(RegExp(r'^, '), ''),
         );
       }
+    } catch (_) {
+      setState(() => _locationController.text = "Skudai, Johor");
     } finally {
       setState(() => _isGettingLocation = false);
     }
@@ -138,7 +109,6 @@ class _SignupScreenState extends State<SignupScreen> {
 
   void _handleSignup() async {
     if (!_formKey.currentState!.validate()) return;
-
     setState(() => _isLoading = true);
     try {
       UserCredential userCredential = await FirebaseAuth.instance
@@ -162,20 +132,17 @@ class _SignupScreenState extends State<SignupScreen> {
       if (_selectedRole == 'Nanny') {
         List<Map<String, dynamic>> customAddonsList = [];
         List<String> automaticTags = [];
-
         for (var name in _selectedAddons) {
           customAddonsList.add({"name": name, "price": 10});
           String targetTag = _mapServiceToTag(name);
-          if (!automaticTags.contains(targetTag)) {
-            automaticTags.add(targetTag);
-          }
+          if (!automaticTags.contains(targetTag)) automaticTags.add(targetTag);
         }
-
         userData.addAll({
           'hourly_rate': double.tryParse(_rateController.text.trim()) ?? 25.0,
           'location': _locationController.text.trim(),
           'rating': 5.0,
-          'isOnline': true,
+          'isOnline': false, // 未通过 KYC 默认离线
+          'isKycVerified': false, // 默认待验证
           'custom_addons_list': customAddonsList,
           'tags': automaticTags,
           'allow_holiday_charge': true,
@@ -187,25 +154,41 @@ class _SignupScreenState extends State<SignupScreen> {
           .collection('users')
           .doc(uid)
           .set(userData);
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Welcome onboard! Account created successfully."),
-            backgroundColor: AppColors.success,
-          ),
-        );
-        Navigator.pop(context);
+        setState(() => _isLoading = false);
+        if (_selectedRole == 'Nanny') {
+          // 保姆注册成功：弹出 KYC 提示
+          KycDialogHelper.showKycPromptDialog(
+            context,
+            onVerifyNow: () async {
+              await KycDialogHelper.showSimulatedKycSheet(context);
+              if (mounted) Navigator.pop(context);
+            },
+            onLater: () {
+              Navigator.pop(context);
+            },
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text("Account created successfully!"),
+              backgroundColor: AppColors.success,
+            ),
+          );
+          Navigator.pop(context);
+        }
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
+        setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text("Signup Error: $e"),
             backgroundColor: AppColors.danger,
           ),
         );
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -233,7 +216,6 @@ class _SignupScreenState extends State<SignupScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Top modern flat streamlined Header
                 const Text(
                   "Join NannyApp",
                   style: TextStyle(
@@ -250,7 +232,6 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // Highlight 1: Say goodbye to traditional old-fashioned selection boxes, upgrade to high-quality realistic 3D tile cards (Role Dynamic Tile Cards)
                 Row(
                   children: [
                     Expanded(
@@ -272,7 +253,6 @@ class _SignupScreenState extends State<SignupScreen> {
                 ),
                 const SizedBox(height: 32),
 
-                // Highlight 2: Abandon old-fashioned bordered large form boxes, use high-transparency quality borderless soft-seat input boxes
                 _buildModernTextField(
                   controller: _nameController,
                   label: "Full Name",
@@ -298,28 +278,23 @@ class _SignupScreenState extends State<SignupScreen> {
                   isPassword: true,
                 ),
 
-                // If Nanny side, high-realism streamlined card seamlessly expands
                 if (_selectedRole == 'Nanny') ...[
                   const SizedBox(height: 8),
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12.0),
-                    child: Text(
-                      "Nanny Professional Profile",
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.dark,
-                      ),
+                  const Text(
+                    "Nanny Profile Setup",
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.dark,
                     ),
                   ),
+                  const SizedBox(height: 14),
                   _buildModernTextField(
                     controller: _rateController,
                     label: "Expected Hourly Rate (RM/hr)",
                     icon: Icons.monetization_on_outlined,
                     keyboardType: TextInputType.number,
                   ),
-
-                  // Highlight 3: Location input box contains high-class radar scan one-tap positioning button
                   _buildModernTextField(
                     controller: _locationController,
                     label: "Service Location / Area",
@@ -343,22 +318,18 @@ class _SignupScreenState extends State<SignupScreen> {
                               size: 20,
                             ),
                             onPressed: _detectSignupLocation,
-                            tooltip: "Auto Detect Location",
                           ),
                   ),
-
-                  const SizedBox(height: 20),
+                  const SizedBox(height: 14),
                   const Text(
-                    "Select Services You Can Provide",
+                    "Services You Provide",
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
-                      fontSize: 15,
+                      fontSize: 14,
                       color: AppColors.dark,
                     ),
                   ),
-                  const SizedBox(height: 12),
-
-                  // Highlight 4: Value-added service checkbox panel completely refactored, abandon traditional ugly long tables, change to high-realism rounded quality cards
+                  const SizedBox(height: 10),
                   ListView.builder(
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
@@ -366,44 +337,37 @@ class _SignupScreenState extends State<SignupScreen> {
                     itemBuilder: (context, idx) {
                       final service = _presetServiceOptions[idx];
                       bool isChecked = _selectedAddons.contains(service);
-                      return AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        margin: const EdgeInsets.only(bottom: 12),
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 8),
                         decoration: BoxDecoration(
                           color: isChecked
-                              ? AppColors.primary.withOpacity(0.05)
+                              ? AppColors.primaryLight
                               : AppColors.lightGray,
-                          borderRadius: BorderRadius.circular(16),
+                          borderRadius: BorderRadius.circular(14),
                           border: Border.all(
                             color: isChecked
-                                ? AppColors.primary
+                                ? AppColors.primary.withOpacity(0.3)
                                 : Colors.transparent,
-                            width: 1,
                           ),
                         ),
                         child: CheckboxListTile(
                           title: Text(
                             service,
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: isChecked
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
+                            style: const TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
                               color: AppColors.dark,
                             ),
                           ),
                           activeColor: AppColors.primary,
-                          checkboxShape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(6),
-                          ),
                           value: isChecked,
                           contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 2,
+                            horizontal: 14,
+                            vertical: 0,
                           ),
-                          onChanged: (bool? value) {
+                          onChanged: (val) {
                             setState(() {
-                              if (value == true) {
+                              if (val == true) {
                                 _selectedAddons.add(service);
                               } else {
                                 _selectedAddons.remove(service);
@@ -415,40 +379,35 @@ class _SignupScreenState extends State<SignupScreen> {
                     },
                   ),
                 ],
-
                 const SizedBox(height: 24),
 
-                // Highlight 5: Streamlined floating gradient effect Sign Up large button
-                SizedBox(
-                  height: 54,
-                  child: ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.dark,
-                      foregroundColor: Colors.white,
-                      elevation: 0,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(16),
-                      ),
+                ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.dark,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    onPressed: _isLoading ? null : _handleSignup,
-                    child: _isLoading
-                        ? const SizedBox(
-                            width: 24,
-                            height: 24,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Text(
-                            "Sign Up",
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 0.5,
-                            ),
-                          ),
+                    padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
+                  onPressed: _isLoading ? null : _handleSignup,
+                  child: _isLoading
+                      ? const SizedBox(
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Text(
+                          "Sign Up",
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                 ),
                 const SizedBox(height: 24),
               ],
@@ -459,12 +418,11 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  // Encapsulated quality role card tile widget
   Widget _buildRoleCard(String role, IconData icon, bool isSelected) {
     return GestureDetector(
       onTap: () => setState(() => _selectedRole = role),
       child: AnimatedContainer(
-        duration: const Duration(milliseconds: 250),
+        duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.symmetric(vertical: 18),
         decoration: BoxDecoration(
           color: isSelected ? Colors.white : AppColors.lightGray,
@@ -473,15 +431,7 @@ class _SignupScreenState extends State<SignupScreen> {
             color: isSelected ? AppColors.primary : Colors.transparent,
             width: 1.5,
           ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: AppColors.primary.withOpacity(0.12),
-                    blurRadius: 10,
-                    offset: const Offset(0, 4),
-                  ),
-                ]
-              : [],
+          boxShadow: isSelected ? AppColors.cardShadow : [],
         ),
         child: Column(
           children: [
@@ -505,7 +455,6 @@ class _SignupScreenState extends State<SignupScreen> {
     );
   }
 
-  // Encapsulated modern high-quality borderless input widget
   Widget _buildModernTextField({
     required TextEditingController controller,
     required String label,
@@ -516,19 +465,19 @@ class _SignupScreenState extends State<SignupScreen> {
     Widget? suffixIcon,
   }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20.0),
+      padding: const EdgeInsets.only(bottom: 16.0),
       child: TextFormField(
         controller: controller,
         obscureText: obscureText,
         keyboardType: keyboardType,
         style: const TextStyle(
-          fontSize: 15,
+          fontSize: 14,
           color: AppColors.dark,
           fontWeight: FontWeight.w500,
         ),
         decoration: InputDecoration(
           labelText: label,
-          labelStyle: const TextStyle(color: AppColors.gray, fontSize: 14),
+          labelStyle: const TextStyle(color: AppColors.gray, fontSize: 13),
           prefixIcon: Icon(icon, color: AppColors.gray, size: 20),
           suffixIcon: isPassword
               ? IconButton(
@@ -545,22 +494,18 @@ class _SignupScreenState extends State<SignupScreen> {
               : suffixIcon,
           filled: true,
           fillColor: AppColors.lightGray,
-          contentPadding: const EdgeInsets.symmetric(vertical: 16),
+          contentPadding: const EdgeInsets.symmetric(vertical: 14),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: BorderSide.none,
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: AppColors.primary, width: 1),
           ),
         ),
         validator: (val) {
           if (val == null || val.isEmpty) return "Field required";
           if (label.contains("Email") && !val.contains('@'))
-            return "Invalid Email address";
+            return "Invalid Email";
           if (label.contains("Password") && val.length < 6)
-            return "Password too short";
+            return "Password must be >= 6 chars";
           return null;
         },
       ),

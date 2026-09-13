@@ -1,18 +1,17 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:project/screens/chat_screen.dart';
 import '../core/theme.dart';
 import '../widgets/booking_bottom_sheet.dart';
+import 'chat_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   final Map<String, dynamic> nanny;
   const ProfileScreen({super.key, required this.nanny});
 
-  // Highlight feature: Click review image to view in fullscreen without quality loss
   void _showFullScreenImage(BuildContext context, String base64Str) {
     showDialog(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.9),
+      barrierColor: Colors.black.withOpacity(0.9),
       builder: (context) => Stack(
         children: [
           Center(
@@ -65,12 +64,10 @@ class ProfileScreen extends StatelessWidget {
     if (nanny['custom_addons_list'] != null) {
       final List<dynamic> rawList = nanny['custom_addons_list'] as List;
       final Set<String> seenNames = {};
-
       for (var item in rawList) {
         if (item is Map) {
           final mappedItem = Map<String, dynamic>.from(item);
           final String serviceName = mappedItem['name'] ?? '';
-
           if (serviceName.isNotEmpty && !seenNames.contains(serviceName)) {
             seenNames.add(serviceName);
             activeServicesList.add(mappedItem);
@@ -79,369 +76,66 @@ class ProfileScreen extends StatelessWidget {
       }
     }
 
+    final safeName = nanny['name'] ?? 'Nanny';
+    final avatarUrl =
+        nanny['image'] ??
+        'https://api.dicebear.com/7.x/avataaars/png?seed=$safeName';
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Column(
         children: [
           Expanded(
             child: SingleChildScrollView(
+              padding: EdgeInsets.zero,
               child: Column(
                 children: [
+                  // 顶部大背景 + 完整层叠头像区
                   Stack(
                     clipBehavior: Clip.none,
-                    alignment: Alignment.topCenter,
+                    alignment: Alignment.bottomCenter,
                     children: [
                       Container(
-                        height: 150,
+                        height: 180,
                         width: double.infinity,
-                        color: AppColors.primary,
-                        padding: const EdgeInsets.only(top: 50, left: 16),
+                        padding: const EdgeInsets.only(top: 48, left: 16),
                         alignment: Alignment.topLeft,
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Color(0xFF0F766E), Color(0xFF134E4A)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
+                        ),
                         child: GestureDetector(
                           onTap: () => Navigator.pop(context),
-                          child: const Icon(
-                            Icons.arrow_back,
-                            color: AppColors.white,
-                            size: 28,
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.black.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.arrow_back_ios_new_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            ),
                           ),
                         ),
                       ),
-                      Container(
-                        margin: const EdgeInsets.only(top: 120),
-                        padding: const EdgeInsets.fromLTRB(20, 60, 20, 20),
-                        decoration: const BoxDecoration(
-                          color: AppColors.white,
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(30),
-                            topRight: Radius.circular(30),
-                          ),
-                        ),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.center,
-                          children: [
-                            Text(
-                              nanny['name'] ?? '',
-                              style: const TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.w800,
-                                color: AppColors.dark,
-                              ),
-                            ),
-                            const SizedBox(height: 5),
-                            Text(
-                              nanny['location'] ?? '',
-                              style: const TextStyle(color: AppColors.gray),
-                            ),
-                            const SizedBox(height: 15),
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              crossAxisAlignment: CrossAxisAlignment.baseline,
-                              textBaseline: TextBaseline.alphabetic,
-                              children: [
-                                Text(
-                                  'RM $baseRate',
-                                  style: const TextStyle(
-                                    fontSize: 26,
-                                    fontWeight: FontWeight.bold,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                                const Text(
-                                  '/hr',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: AppColors.gray,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 10,
-                                vertical: 4,
-                              ),
-                              decoration: BoxDecoration(
-                                color: allowHolidayCharge
-                                    ? const Color(0xFFFEE2E2)
-                                    : const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Text(
-                                allowHolidayCharge
-                                    ? "✨ Holiday rate: RM ${baseRate + holidaySurcharge}/hr (+RM$holidaySurcharge)"
-                                    : "🟢 Holiday charge: Waived (No Extra Fees!)",
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  color: allowHolidayCharge
-                                      ? const Color(0xFFB91C1C)
-                                      : AppColors.gray,
-                                ),
-                              ),
-                            ),
-
-                            const SizedBox(height: 20),
-                            const Divider(color: AppColors.lightGray),
-                            const SizedBox(height: 15),
-
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                "About",
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.dark,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                nanny['about'] ?? 'Experienced nanny.',
-                                style: const TextStyle(
-                                  fontSize: 15,
-                                  height: 1.6,
-                                  color: Color(0xFF475569),
-                                ),
-                              ),
-                            ),
-
-                            const SizedBox(height: 25),
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                "Premium Add-on Services",
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.dark,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            if (activeServicesList.isEmpty)
-                              const Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  "This nanny offers base care service only.",
-                                  style: TextStyle(
-                                    fontSize: 13,
-                                    color: AppColors.gray,
-                                    fontStyle: FontStyle.italic,
-                                  ),
-                                ),
-                              )
-                            else
-                              ListView.builder(
-                                shrinkWrap: true,
-                                physics: const NeverScrollableScrollPhysics(),
-                                padding: EdgeInsets.zero,
-                                itemCount: activeServicesList.length,
-                                itemBuilder: (context, i) {
-                                  final s = activeServicesList[i];
-                                  return Container(
-                                    margin: const EdgeInsets.only(bottom: 8),
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.lightGray,
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        const Icon(
-                                          Icons.star,
-                                          color: AppColors.primary,
-                                          size: 16,
-                                        ),
-                                        const SizedBox(width: 10),
-                                        Expanded(
-                                          child: Text(
-                                            s['name'] ?? '',
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.w600,
-                                              color: AppColors.dark,
-                                            ),
-                                          ),
-                                        ),
-                                        Text(
-                                          "RM ${s['price']}.00",
-                                          style: const TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.primary,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                },
-                              ),
-
-                            const SizedBox(height: 25),
-                            const Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                "Tags",
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.dark,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Wrap(
-                                spacing: 8,
-                                runSpacing: 8,
-                                children:
-                                    (nanny['tags'] as List<dynamic>? ?? [])
-                                        .map(
-                                          (tag) => Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 12,
-                                              vertical: 6,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: AppColors.lightGray,
-                                              borderRadius:
-                                                  BorderRadius.circular(8),
-                                            ),
-                                            child: Text(
-                                              tag.toString(),
-                                              style: const TextStyle(
-                                                color: AppColors.gray,
-                                                fontWeight: FontWeight.w600,
-                                                fontSize: 12,
-                                              ),
-                                            ),
-                                          ),
-                                        )
-                                        .toList(),
-                              ),
-                            ),
-
-                            const SizedBox(height: 25),
-                            Align(
-                              alignment: Alignment.centerLeft,
-                              child: Text(
-                                "Reviews (${reviews.length})",
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: AppColors.dark,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 10),
-
-                            // Loop through and render parent review cards
-                            ...reviews.map((r) {
-                              String? reviewImg =
-                                  r['imageUrl'] ??
-                                  r['reviewImageUrl']; // Compatible with both field structures
-
-                              return Container(
-                                width: double.infinity,
-                                margin: const EdgeInsets.only(bottom: 12),
-                                padding: const EdgeInsets.all(14),
-                                decoration: BoxDecoration(
-                                  color: AppColors.lightGray,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(
-                                          r['user'] ?? 'User',
-                                          style: const TextStyle(
-                                            fontWeight: FontWeight.bold,
-                                            color: AppColors.dark,
-                                          ),
-                                        ),
-                                        Text(
-                                          r['date'] ?? '',
-                                          style: const TextStyle(
-                                            fontSize: 12,
-                                            color: AppColors.gray,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 5),
-                                    Row(
-                                      children: List.generate(
-                                        5,
-                                        (index) => Icon(
-                                          index < (r['rating'] as num)
-                                              ? Icons.star
-                                              : Icons.star_border,
-                                          size: 14,
-                                          color: AppColors.accent,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text(
-                                      r['comment'] ?? '',
-                                      style: const TextStyle(
-                                        color: AppColors.gray,
-                                        fontSize: 13,
-                                        height: 1.4,
-                                      ),
-                                    ),
-
-                                    // Core fix highlight: If this review has a Base64 real image uploaded by parent, decode and render it immediately!
-                                    if (reviewImg != null &&
-                                        reviewImg.isNotEmpty) ...[
-                                      const SizedBox(height: 10),
-                                      GestureDetector(
-                                        onTap: () => _showFullScreenImage(
-                                          context,
-                                          reviewImg,
-                                        ),
-                                        child: ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          child: Image.memory(
-                                            base64Decode(reviewImg),
-                                            height: 80,
-                                            width: 80,
-                                            fit: BoxFit.cover,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              );
-                            }),
-                          ],
-                        ),
-                      ),
+                      // 悬浮居中的头像（半入绿色底、半入白色底）
                       Positioned(
-                        top: 70,
+                        bottom: -46,
                         child: Container(
-                          width: 100,
-                          height: 100,
+                          width: 96,
+                          height: 96,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            border: Border.all(
-                              color: AppColors.white,
-                              width: 5,
-                            ),
+                            color: Colors.white,
+                            border: Border.all(color: Colors.white, width: 4),
+                            boxShadow: AppColors.cardShadow,
                             image: DecorationImage(
-                              image: NetworkImage(nanny['image'] ?? ''),
+                              image: NetworkImage(avatarUrl),
                               fit: BoxFit.cover,
                             ),
                           ),
@@ -449,28 +143,329 @@ class ProfileScreen extends StatelessWidget {
                       ),
                     ],
                   ),
+
+                  // 白色卡片内容主体
+                  Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(top: 54),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 12,
+                    ),
+                    decoration: const BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.vertical(
+                        top: Radius.circular(28),
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          safeName,
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w900,
+                            color: AppColors.dark,
+                            letterSpacing: -0.3,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Icon(
+                              Icons.location_on_outlined,
+                              size: 14,
+                              color: AppColors.gray,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              nanny['location'] ?? 'Location not specified',
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: AppColors.gray,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          crossAxisAlignment: CrossAxisAlignment.baseline,
+                          textBaseline: TextBaseline.alphabetic,
+                          children: [
+                            Text(
+                              "RM $baseRate",
+                              style: const TextStyle(
+                                fontSize: 26,
+                                fontWeight: FontWeight.w900,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                            const Text(
+                              " / hr",
+                              style: TextStyle(
+                                color: AppColors.gray,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: allowHolidayCharge
+                                ? const Color(0xFFFEF2F2)
+                                : AppColors.lightGray,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: allowHolidayCharge
+                                  ? const Color(0xFFFECACA)
+                                  : Colors.transparent,
+                            ),
+                          ),
+                          child: Text(
+                            allowHolidayCharge
+                                ? "Holiday rate: RM ${baseRate + holidaySurcharge}/hr (+RM$holidaySurcharge)"
+                                : "Holiday charge: Waived (Standard Rate Only)",
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: allowHolidayCharge
+                                  ? const Color(0xFFDC2626)
+                                  : AppColors.gray,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 20),
+                        const Divider(height: 1, color: AppColors.border),
+                        const SizedBox(height: 20),
+
+                        _buildSectionTitle("About Caregiver"),
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Text(
+                            nanny['about'] ??
+                                nanny['bio'] ??
+                                'Experienced and caring childcare specialist.',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              height: 1.6,
+                              color: AppColors.body,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        _buildSectionTitle("Specialized Services & Add-ons"),
+                        const SizedBox(height: 10),
+                        if (activeServicesList.isEmpty)
+                          const Align(
+                            alignment: Alignment.centerLeft,
+                            child: Text(
+                              "Standard care service only.",
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: AppColors.gray,
+                                fontStyle: FontStyle.italic,
+                              ),
+                            ),
+                          )
+                        else
+                          ...activeServicesList.map(
+                            (s) => Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.lightGray,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    s['name'] ?? '',
+                                    style: const TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: AppColors.dark,
+                                    ),
+                                  ),
+                                  Text(
+                                    "+RM ${s['price']}.00",
+                                    style: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w800,
+                                      color: AppColors.primary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 24),
+
+                        _buildSectionTitle("Tags & Skills"),
+                        const SizedBox(height: 10),
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: (nanny['tags'] as List<dynamic>? ?? [])
+                                .map((tag) {
+                                  return Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primaryLight,
+                                      borderRadius: BorderRadius.circular(10),
+                                    ),
+                                    child: Text(
+                                      tag.toString(),
+                                      style: const TextStyle(
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  );
+                                })
+                                .toList(),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+
+                        _buildSectionTitle("Reviews (${reviews.length})"),
+                        const SizedBox(height: 12),
+                        ...reviews.map((r) {
+                          String? reviewImg =
+                              r['imageUrl'] ?? r['reviewImageUrl'];
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: AppColors.border),
+                              boxShadow: AppColors.cardShadow,
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Text(
+                                      r['user'] ?? 'Parent User',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w800,
+                                        color: AppColors.dark,
+                                      ),
+                                    ),
+                                    Text(
+                                      r['date'] ?? '',
+                                      style: const TextStyle(
+                                        fontSize: 11,
+                                        color: AppColors.muted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: List.generate(
+                                    5,
+                                    (i) => Icon(
+                                      i < (r['rating'] as num)
+                                          ? Icons.star_rounded
+                                          : Icons.star_border_rounded,
+                                      size: 16,
+                                      color: AppColors.accent,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  r['comment'] ?? '',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    color: AppColors.body,
+                                    height: 1.4,
+                                  ),
+                                ),
+                                if (reviewImg != null &&
+                                    reviewImg.isNotEmpty) ...[
+                                  const SizedBox(height: 10),
+                                  GestureDetector(
+                                    onTap: () => _showFullScreenImage(
+                                      context,
+                                      reviewImg,
+                                    ),
+                                    child: ClipRRect(
+                                      borderRadius: BorderRadius.circular(10),
+                                      child: Image.memory(
+                                        base64Decode(reviewImg),
+                                        height: 70,
+                                        width: 70,
+                                        fit: BoxFit.cover,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                          );
+                        }),
+                        const SizedBox(height: 20),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
+
+          // 底部悬浮操作栏
           Container(
-            padding: const EdgeInsets.all(20),
-            decoration: const BoxDecoration(
-              color: AppColors.white,
-              border: Border(top: BorderSide(color: AppColors.lightGray)),
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border(
+                top: BorderSide(color: AppColors.border.withOpacity(0.8)),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.dark.withOpacity(0.04),
+                  blurRadius: 16,
+                  offset: const Offset(0, -4),
+                ),
+              ],
             ),
             child: Row(
               children: [
                 Container(
-                  width: 50,
-                  height: 50,
                   decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.gray),
-                    borderRadius: BorderRadius.circular(12),
+                    color: AppColors.lightGray,
+                    borderRadius: BorderRadius.circular(16),
                   ),
                   child: IconButton(
                     icon: const Icon(
-                      Icons.chat_bubble_outline,
+                      Icons.chat_bubble_outline_rounded,
                       color: AppColors.primary,
                     ),
                     onPressed: () => Navigator.push(
@@ -487,7 +482,7 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 15),
+                const SizedBox(width: 14),
                 Expanded(
                   child: ElevatedButton(
                     onPressed: () => showModalBottomSheet(
@@ -499,14 +494,15 @@ class ProfileScreen extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppColors.primary,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                        borderRadius: BorderRadius.circular(16),
                       ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      elevation: 0,
                     ),
                     child: const Text(
                       "Book Now",
                       style: TextStyle(
-                        color: AppColors.white,
+                        color: Colors.white,
                         fontSize: 16,
                         fontWeight: FontWeight.bold,
                       ),
@@ -517,6 +513,20 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSectionTitle(String title) {
+    return Align(
+      alignment: Alignment.centerLeft,
+      child: Text(
+        title,
+        style: const TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w800,
+          color: AppColors.dark,
+        ),
       ),
     );
   }

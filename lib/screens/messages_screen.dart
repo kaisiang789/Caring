@@ -15,12 +15,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
   Key _msgRefreshKey = UniqueKey();
 
   Future<void> _handleRefresh() async {
-    await Future.delayed(const Duration(milliseconds: 800));
-    if (mounted) {
-      setState(() {
-        _msgRefreshKey = UniqueKey();
-      });
-    }
+    await Future.delayed(const Duration(milliseconds: 600));
+    if (mounted) setState(() => _msgRefreshKey = UniqueKey());
   }
 
   @override
@@ -33,19 +29,19 @@ class _MessagesScreenState extends State<MessagesScreen> {
       onRefresh: _handleRefresh,
       child: ListView(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: EdgeInsets.zero,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
         children: [
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 20, 16, 10),
-            child: Text(
-              "Messages",
-              style: TextStyle(
-                fontSize: 28,
-                fontWeight: FontWeight.w800,
-                color: AppColors.dark,
-              ),
+          const Text(
+            "Messages",
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              color: AppColors.dark,
+              letterSpacing: -0.5,
             ),
           ),
+          const SizedBox(height: 16),
+
           StreamBuilder<QuerySnapshot>(
             key: _msgRefreshKey,
             stream: FirebaseFirestore.instance
@@ -56,22 +52,22 @@ class _MessagesScreenState extends State<MessagesScreen> {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(
                   child: Padding(
-                    padding: EdgeInsets.all(40.0),
-                    child: CircularProgressIndicator(),
+                    padding: EdgeInsets.all(40),
+                    child: CircularProgressIndicator(color: AppColors.primary),
                   ),
                 );
               }
               if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(40.0),
-                    child: Text(
-                      "No messages yet.",
-                      style: TextStyle(color: AppColors.gray),
-                    ),
+                return Container(
+                  padding: const EdgeInsets.symmetric(vertical: 60),
+                  alignment: Alignment.center,
+                  child: const Text(
+                    "No message conversations yet.",
+                    style: TextStyle(color: AppColors.gray, fontSize: 13),
                   ),
                 );
               }
+
               var chatRooms = snapshot.data!.docs;
               chatRooms.sort((a, b) {
                 var dataA = a.data() as Map<String, dynamic>;
@@ -84,7 +80,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
               return ListView.builder(
                 shrinkWrap: true,
                 physics: const NeverScrollableScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 16),
                 itemCount: chatRooms.length,
                 itemBuilder: (context, index) {
                   var roomData =
@@ -101,7 +96,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
                   String lastMessage = roomData['lastMessage'] ?? '';
                   bool hasUnread = roomData['unread_$currentUid'] ?? false;
 
-                  // Highlight fix: Use FutureBuilder to fetch the other party's latest real avatar from users collection in real time, completely solving the avatar mismatch problem!
                   return FutureBuilder<DocumentSnapshot>(
                     future: FirebaseFirestore.instance
                         .collection('users')
@@ -111,7 +105,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
                       String realImage =
                           partnerData['image'] ??
                           'https://api.dicebear.com/7.x/avataaars/png?seed=$partnerName';
-
                       if (userSnap.hasData && userSnap.data!.exists) {
                         var uData =
                             userSnap.data!.data() as Map<String, dynamic>?;
@@ -122,9 +115,64 @@ class _MessagesScreenState extends State<MessagesScreen> {
                         }
                       }
 
-                      return GestureDetector(
-                        onTap: () {
-                          Navigator.push(
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: AppColors.border),
+                          boxShadow: AppColors.cardShadow,
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          leading: Stack(
+                            children: [
+                              CircleAvatar(
+                                radius: 24,
+                                backgroundColor: AppColors.lightGray,
+                                backgroundImage: NetworkImage(realImage),
+                              ),
+                              if (hasUnread)
+                                Positioned(
+                                  right: 0,
+                                  top: 0,
+                                  child: Container(
+                                    width: 10,
+                                    height: 10,
+                                    decoration: const BoxDecoration(
+                                      color: AppColors.danger,
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+                          title: Text(
+                            partnerName,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              color: AppColors.dark,
+                            ),
+                          ),
+                          subtitle: Text(
+                            lastMessage,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: hasUnread
+                                  ? AppColors.dark
+                                  : AppColors.gray,
+                              fontWeight: hasUnread
+                                  ? FontWeight.w700
+                                  : FontWeight.normal,
+                              fontSize: 13,
+                            ),
+                          ),
+                          onTap: () => Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) => ChatScreen(
@@ -135,63 +183,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                 },
                               ),
                             ),
-                          );
-                        },
-                        child: Container(
-                          margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppColors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: AppColors.cardShadow,
-                          ),
-                          child: Row(
-                            children: [
-                              CircleAvatar(
-                                radius: 25,
-                                backgroundImage: NetworkImage(realImage),
-                                backgroundColor: Colors.grey[200],
-                              ),
-                              const SizedBox(width: 15),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      partnerName,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        color: AppColors.dark,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 5),
-                                    Text(
-                                      lastMessage,
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        color: hasUnread
-                                            ? AppColors.dark
-                                            : AppColors.gray,
-                                        fontWeight: hasUnread
-                                            ? FontWeight.w600
-                                            : FontWeight.normal,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              if (hasUnread)
-                                Container(
-                                  width: 10,
-                                  height: 10,
-                                  decoration: const BoxDecoration(
-                                    color: AppColors.danger,
-                                    shape: BoxShape.circle,
-                                  ),
-                                ),
-                            ],
                           ),
                         ),
                       );
@@ -201,7 +192,6 @@ class _MessagesScreenState extends State<MessagesScreen> {
               );
             },
           ),
-          const SizedBox(height: 40),
         ],
       ),
     );
